@@ -294,6 +294,7 @@ function applyPlay(room, seat, cards) {
     room.roundHistory.push({
       round: room.round, net: room.payout.net, scores: room.payout.scores,
       cardsLeft: room.hands.map(h => h.length), players: [...room.players],
+      hands: room.hands.map(h => h.map(c => ({ rank: c.rank, suit: c.suit }))),
     });
     room.lastMultiplierVictims = [0, 1, 2, 3].filter(s => room.hands[s].length >= 10);
     if (room.matchRoundsRemaining !== null) room.matchRoundsRemaining -= 1;
