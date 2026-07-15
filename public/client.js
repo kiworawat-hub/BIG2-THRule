@@ -93,7 +93,7 @@ function TrickPile({ trickPile }) {
     filter: i < n - 1 ? "brightness(0.8)" : "none"
   } }, entry.cards.map((c) => /* @__PURE__ */ React.createElement(PlayingCard, { key: cardKey(c), card: c, small: true })))));
 }
-function Table({ mySeat, players, handCounts, turn, trickPile, finished, passedThisTrick, cumulative }) {
+function Table({ mySeat, players, handCounts, turn, trickPile, finished, passedThisTrick, cumulative, turnStartedAt, turnSeconds }) {
   const others = [1, 2, 3].map((o) => (mySeat + o) % 4);
   function posKey(seat) {
     const off = (seat - mySeat + 4) % 4;
@@ -105,15 +105,25 @@ function Table({ mySeat, players, handCounts, turn, trickPile, finished, passedT
     const active = turn === seat, passed = (passedThisTrick || []).includes(seat), big2 = handCounts[seat] === 1;
     const color = passed ? "#6b6b6b" : SEAT_COLORS[seat];
     const score = cumulative ? cumulative[seat] : 0;
-    return /* @__PURE__ */ React.createElement("div", { style: {
+    const inner = /* @__PURE__ */ React.createElement("div", { style: {
       textAlign: "center",
       padding: "8px 12px",
       borderRadius: 12,
       minWidth: 64,
-      background: "linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.02))",
-      border: `2px solid ${color}`,
-      boxShadow: active ? `0 0 12px ${color}99` : "0 2px 6px rgba(0,0,0,.3)"
+      background: "linear-gradient(180deg, rgba(20,32,54,.92), rgba(14,24,44,.92))",
+      border: active ? "none" : `2px solid ${color}`,
+      boxShadow: active ? "none" : "0 2px 6px rgba(0,0,0,.3)"
     } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#f4e9d8", fontWeight: 700 } }, players[seat] || `\u0E1A\u0E2D\u0E17 ${seat + 1}`, finished.includes(seat) && " \u2705"), big2 ? /* @__PURE__ */ React.createElement("div", { style: { fontSize: 15, fontWeight: 900, color: "#ff5252" } }, "BIG2! \u{1F525}") : /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: active ? "#d4af37" : "#8a9a8e" } }, passed ? "\u0E1C\u0E48\u0E32\u0E19" : `${handCounts[seat]} \u0E43\u0E1A`), cumulative && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: score >= 0 ? "#6fbf8a" : "#e08a8a" } }, score >= 0 ? "+" : "", score));
+    if (!active) return inner;
+    const elapsed = turnStartedAt ? Date.now() - turnStartedAt : 0;
+    const remainingFrac = Math.max(0, Math.min(1, 1 - elapsed / ((turnSeconds || 30) * 1e3)));
+    const deg = remainingFrac * 360;
+    return /* @__PURE__ */ React.createElement("div", { style: {
+      padding: 3,
+      borderRadius: 14,
+      background: `conic-gradient(${color} ${deg}deg, rgba(255,255,255,.18) ${deg}deg)`,
+      boxShadow: `0 0 12px ${color}99`
+    } }, inner);
   }
   return /* @__PURE__ */ React.createElement("div", { style: { width: "100%", marginBottom: 12 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "center", marginBottom: 10 } }, /* @__PURE__ */ React.createElement(Seat, { seat: bySeat.top })), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 12 } }, /* @__PURE__ */ React.createElement(Seat, { seat: bySeat.left }), /* @__PURE__ */ React.createElement("div", { style: {
     position: "relative",
@@ -162,10 +172,10 @@ function App() {
     return () => socket.disconnect();
   }, []);
   useEffect(() => {
-    if (!state || state.turn !== state.mySeat) return;
-    const iv = setInterval(() => tick((t) => t + 1), 1e3);
+    if (!state || state.phase !== "playing") return;
+    const iv = setInterval(() => tick((t) => t + 1), 250);
     return () => clearInterval(iv);
-  }, [state == null ? void 0 : state.turn, state == null ? void 0 : state.mySeat]);
+  }, [state == null ? void 0 : state.turn, state == null ? void 0 : state.phase]);
   function createRoom() {
     if (!name.trim()) {
       setError("\u0E43\u0E2A\u0E48\u0E0A\u0E37\u0E48\u0E2D\u0E01\u0E48\u0E2D\u0E19\u0E04\u0E23\u0E31\u0E1A");
@@ -224,7 +234,9 @@ function App() {
       trickPile: state.trickPile,
       finished: state.finished,
       passedThisTrick: state.passedThisTrick,
-      cumulative: state.cumulative
+      cumulative: state.cumulative,
+      turnStartedAt: state.turnStartedAt,
+      turnSeconds: state.turnSeconds
     }
   ), error && /* @__PURE__ */ React.createElement("div", { style: { color: "#e08a8a", fontSize: 12, textAlign: "center", marginBottom: 8 } }, error), state.phase === "playing" && /* @__PURE__ */ React.createElement(React.Fragment, null, isMyTurn && /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", color: "#1a1a1a", background: "#d4af37", borderRadius: 6, padding: "6px 10px", fontWeight: 700, marginBottom: 8 } }, "\u0E15\u0E32\u0E04\u0E38\u0E13! ", secsLeft !== null && `\u23F1 ${secsLeft}s`), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 8 } }, /* @__PURE__ */ React.createElement("div", { style: styles.statBox }, /* @__PURE__ */ React.createElement("span", { style: {
     display: "inline-block",
