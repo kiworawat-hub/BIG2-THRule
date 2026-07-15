@@ -215,9 +215,30 @@ function getForcedHighCard(state, actingSeat) {
   return myHighest;
 }
 
+function drawSeatCards() {
+  const deck = shuffle(makeDeck());
+  return [0, 1, 2, 3].map(i => deck[i]);
+}
+
+function seatDrawOrder(cards) {
+  return [0, 1, 2, 3].sort((a, b) => cardValue(cards[b]) - cardValue(cards[a]));
+}
+
+function fillRemainingSeats(seat1, seat2) {
+  const remaining = [0, 1, 2, 3].filter(s => s !== seat1 && s !== seat2);
+  remaining.sort((a, b) => ((a - seat2 + 4) % 4) - ((b - seat2 + 4) % 4));
+  return remaining;
+}
+
+function seatDrawTriggered(multiplierVictims, leaderSeat) {
+  if (!multiplierVictims || multiplierVictims.length === 0) return false;
+  return multiplierVictims.some(s => (s - leaderSeat + 4) % 4 === 3);
+}
+
 module.exports = {
   SUITS, RANKS, SEAT_COLORS,
   cardKey, cardValue, makeDeck, shuffle, dealFour, findStartPlayer,
   classifyCombo, comboBeats, handPoints, playerScore, computePayouts,
   trickShouldReset, resolveNextTurn, findOneCardSeat, highestCard, getForcedHighCard,
+  drawSeatCards, seatDrawOrder, fillRemainingSeats, seatDrawTriggered,
 };
