@@ -515,10 +515,39 @@ io.on("connection", (socket) => {
     io.to(code).emit("chatMessage", msg);
   });
 
+  // ---- Voice chat signaling relay ----
+  // The server never sees/handles audio itself — it only relays small
+  // WebRTC handshake messages between specific peers so their browsers can
+  // set up a direct peer-to-peer audio connection (low latency).
+  socket.on("voiceJoin", ({ code }) => {
+    const room = rooms.get(code);
+    if (!room) return;
+    room.voiceSockets = room.voiceSockets || new Set();
+    const existing = [...room.voiceSockets];
+    room.voiceSockets.add(socket.id);
+    socket.emit("voicePeers", existing); // tell the newcomer who's already in voice chat
+    existing.forEach(id => io.sockets.sockets.get(id)?.emit("voicePeerJoined", { id: socket.id }));
+  });
+
+  socket.on("voiceLeave", ({ code }) => {
+    const room = rooms.get(code);
+    if (!room || !room.voiceSockets) return;
+    room.voiceSockets.delete(socket.id);
+    room.voiceSockets.forEach(id => io.sockets.sockets.get(id)?.emit("voicePeerLeft", { id: socket.id }));
+  });
+
+  socket.on("voiceSignal", ({ to, data }) => {
+    io.sockets.sockets.get(to)?.emit("voiceSignal", { from: socket.id, data });
+  });
+
   socket.on("disconnect", () => {
     for (const room of rooms.values()) {
       const seat = seatOf(room, socket.id);
       if (seat !== -1) room.socketIds[seat] = null; // seat stays reserved by name; bot fills turns meanwhile
+      if (room.voiceSockets && room.voiceSockets.has(socket.id)) {
+        room.voiceSockets.delete(socket.id);
+        room.voiceSockets.forEach(id => io.sockets.sockets.get(id)?.emit("voicePeerLeft", { id: socket.id }));
+      }
     }
   });
 });
