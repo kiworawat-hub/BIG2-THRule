@@ -24,6 +24,15 @@ const COMBO_LABEL = { single: "\u0E43\u0E1A\u0E40\u0E14\u0E35\u0E22\u0E27", pair
 function cardKey(c) {
   return `${c.rank}${c.suit}`;
 }
+function handPoints(hand) {
+  let pts = 0;
+  (hand || []).forEach((c) => {
+    if (c.rank === "2") pts += 5;
+    else if (c.rank === "A") pts += 2;
+    else pts += 1;
+  });
+  return pts;
+}
 function PlayingCard({ card, selected, onClick, small, large, style }) {
   const w = large ? 68 : small ? 40 : 58, h = large ? 100 : small ? 58 : 82;
   const rankSize = large ? 20 : small ? 14 : 18, suitBig = large ? 30 : small ? 18 : 27;
@@ -84,7 +93,7 @@ function TrickPile({ trickPile }) {
     filter: i < n - 1 ? "brightness(0.8)" : "none"
   } }, entry.cards.map((c) => /* @__PURE__ */ React.createElement(PlayingCard, { key: cardKey(c), card: c, small: true })))));
 }
-function Table({ mySeat, players, handCounts, turn, trickPile, finished, passedThisTrick }) {
+function Table({ mySeat, players, handCounts, turn, trickPile, finished, passedThisTrick, cumulative }) {
   const others = [1, 2, 3].map((o) => (mySeat + o) % 4);
   function posKey(seat) {
     const off = (seat - mySeat + 4) % 4;
@@ -95,6 +104,7 @@ function Table({ mySeat, players, handCounts, turn, trickPile, finished, passedT
   function Seat({ seat }) {
     const active = turn === seat, passed = (passedThisTrick || []).includes(seat), big2 = handCounts[seat] === 1;
     const color = passed ? "#6b6b6b" : SEAT_COLORS[seat];
+    const score = cumulative ? cumulative[seat] : 0;
     return /* @__PURE__ */ React.createElement("div", { style: {
       textAlign: "center",
       padding: "8px 12px",
@@ -103,7 +113,7 @@ function Table({ mySeat, players, handCounts, turn, trickPile, finished, passedT
       background: "linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.02))",
       border: `2px solid ${color}`,
       boxShadow: active ? `0 0 12px ${color}99` : "0 2px 6px rgba(0,0,0,.3)"
-    } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#f4e9d8", fontWeight: 700 } }, players[seat] || `\u0E1A\u0E2D\u0E17 ${seat + 1}`, finished.includes(seat) && " \u2705"), big2 ? /* @__PURE__ */ React.createElement("div", { style: { fontSize: 15, fontWeight: 900, color: "#ff5252" } }, "BIG2! \u{1F525}") : /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: active ? "#d4af37" : "#8a9a8e" } }, passed ? "\u0E1C\u0E48\u0E32\u0E19" : `${handCounts[seat]} \u0E43\u0E1A`));
+    } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#f4e9d8", fontWeight: 700 } }, players[seat] || `\u0E1A\u0E2D\u0E17 ${seat + 1}`, finished.includes(seat) && " \u2705"), big2 ? /* @__PURE__ */ React.createElement("div", { style: { fontSize: 15, fontWeight: 900, color: "#ff5252" } }, "BIG2! \u{1F525}") : /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: active ? "#d4af37" : "#8a9a8e" } }, passed ? "\u0E1C\u0E48\u0E32\u0E19" : `${handCounts[seat]} \u0E43\u0E1A`), cumulative && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: score >= 0 ? "#6fbf8a" : "#e08a8a" } }, score >= 0 ? "+" : "", score));
   }
   return /* @__PURE__ */ React.createElement("div", { style: { width: "100%", marginBottom: 12 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "center", marginBottom: 10 } }, /* @__PURE__ */ React.createElement(Seat, { seat: bySeat.top })), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 12 } }, /* @__PURE__ */ React.createElement(Seat, { seat: bySeat.left }), /* @__PURE__ */ React.createElement("div", { style: {
     position: "relative",
@@ -126,7 +136,9 @@ const styles = {
   goldBtn: { width: "100%", padding: "12px 14px", borderRadius: 8, border: "none", background: "linear-gradient(180deg,#e6c565,#c9a03e)", color: "#1a1a1a", fontWeight: 700, fontSize: 15, marginBottom: 6 },
   greenBtn: { width: "100%", padding: "12px 14px", borderRadius: 8, border: "1px solid #3a5a7f", background: "transparent", color: "#f4e9d8", fontWeight: 600, fontSize: 15 },
   wrap: { width: "100%", maxWidth: 720 },
-  statBox: { flex: 1, display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", borderRadius: 14, background: "linear-gradient(180deg, rgba(212,175,55,.14), rgba(212,175,55,.04))", border: "1.5px solid #d4af37" }
+  statBox: { flex: 1, display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", borderRadius: 14, background: "linear-gradient(180deg, rgba(212,175,55,.14), rgba(212,175,55,.04))", border: "1.5px solid #d4af37" },
+  modalOverlay: { position: "fixed", inset: 0, background: "rgba(0,0,0,.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1e3, padding: 16 },
+  modalCard: { background: "#0f1f3a", border: "1px solid #2f5f8f", borderRadius: 16, padding: "22px 18px", width: "100%", maxWidth: 380, maxHeight: "80vh", overflowY: "auto", boxShadow: "0 8px 32px rgba(0,0,0,.5)" }
 };
 function App() {
   const socketRef = useRef(null);
@@ -211,8 +223,22 @@ function App() {
       turn: state.turn,
       trickPile: state.trickPile,
       finished: state.finished,
-      passedThisTrick: state.passedThisTrick
+      passedThisTrick: state.passedThisTrick,
+      cumulative: state.cumulative
     }
-  ), error && /* @__PURE__ */ React.createElement("div", { style: { color: "#e08a8a", fontSize: 12, textAlign: "center", marginBottom: 8 } }, error), state.phase === "playing" && /* @__PURE__ */ React.createElement(React.Fragment, null, isMyTurn && /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", color: "#1a1a1a", background: "#d4af37", borderRadius: 6, padding: "6px 10px", fontWeight: 700, marginBottom: 8 } }, "\u0E15\u0E32\u0E04\u0E38\u0E13! ", secsLeft !== null && `\u23F1 ${secsLeft}s`), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 8 } }, /* @__PURE__ */ React.createElement("div", { style: styles.statBox }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { color: "#f4e9d8", fontSize: 15, fontWeight: 800 } }, myHand.length, " \u0E43\u0E1A"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#8a9a8e" } }, "\u0E44\u0E1E\u0E48\u0E43\u0E19\u0E21\u0E37\u0E2D\u0E04\u0E38\u0E13")))), /* @__PURE__ */ React.createElement(Hand, { cards: myHand, selected, onToggle: toggleSelect }), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, marginTop: 8 } }, /* @__PURE__ */ React.createElement("button", { style: __spreadProps(__spreadValues({}, styles.goldBtn), { flex: 1, opacity: isMyTurn && selected.length ? 1 : 0.5 }), disabled: !isMyTurn || selected.length === 0, onClick: () => playSelected() }, "\u0E25\u0E07\u0E44\u0E1E\u0E48 (", selected.length, ")"), /* @__PURE__ */ React.createElement("button", { style: __spreadProps(__spreadValues({}, styles.greenBtn), { flex: 1, opacity: isMyTurn ? 1 : 0.5 }), disabled: !isMyTurn, onClick: passTurn }, "\u0E1C\u0E48\u0E32\u0E19"))), state.phase === "finished" && /* @__PURE__ */ React.createElement("div", { style: { marginTop: 12, textAlign: "center", background: "rgba(0,0,0,.4)", borderRadius: 14, padding: 16 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 36 } }, "\u{1F389}"), /* @__PURE__ */ React.createElement("div", { style: { color: "#d4af37", fontWeight: 700 } }, state.players[state.finished[0]] || `\u0E1A\u0E2D\u0E17 ${state.finished[0] + 1}`, " \u0E0A\u0E19\u0E30\u0E23\u0E2D\u0E1A\u0E17\u0E35\u0E48 ", state.round, "!"), state.payout && [0, 1, 2, 3].map((s) => /* @__PURE__ */ React.createElement("div", { key: s, style: { fontSize: 12, color: "#f4e9d8", marginTop: 6 } }, state.players[s] || `\u0E1A\u0E2D\u0E17 ${s + 1}`, ": ", /* @__PURE__ */ React.createElement("span", { style: { color: state.payout.net[s] >= 0 ? "#6fbf8a" : "#e08a8a", fontWeight: 700 } }, state.payout.net[s] >= 0 ? "+" : "", state.payout.net[s]))), state.mySeat === state.finished[0] || state.players[state.finished[0]] === null && state.mySeat === 0 ? /* @__PURE__ */ React.createElement("button", { style: __spreadProps(__spreadValues({}, styles.goldBtn), { marginTop: 14 }), onClick: nextRound }, "\u0E40\u0E23\u0E34\u0E48\u0E21\u0E23\u0E2D\u0E1A\u0E15\u0E48\u0E2D\u0E44\u0E1B") : /* @__PURE__ */ React.createElement("p", { style: { color: "#8a9a8e", fontSize: 12, marginTop: 10 } }, "\u0E23\u0E2D\u0E1C\u0E39\u0E49\u0E0A\u0E19\u0E30\u0E01\u0E14\u0E40\u0E23\u0E34\u0E48\u0E21\u0E23\u0E2D\u0E1A\u0E15\u0E48\u0E2D\u0E44\u0E1B..."))));
+  ), error && /* @__PURE__ */ React.createElement("div", { style: { color: "#e08a8a", fontSize: 12, textAlign: "center", marginBottom: 8 } }, error), state.phase === "playing" && /* @__PURE__ */ React.createElement(React.Fragment, null, isMyTurn && /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", color: "#1a1a1a", background: "#d4af37", borderRadius: 6, padding: "6px 10px", fontWeight: 700, marginBottom: 8 } }, "\u0E15\u0E32\u0E04\u0E38\u0E13! ", secsLeft !== null && `\u23F1 ${secsLeft}s`), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 8 } }, /* @__PURE__ */ React.createElement("div", { style: styles.statBox }, /* @__PURE__ */ React.createElement("span", { style: {
+    display: "inline-block",
+    width: 12,
+    height: 12,
+    borderRadius: "50%",
+    flexShrink: 0,
+    background: (state.passedThisTrick || []).includes(state.mySeat) ? "#6b6b6b" : SEAT_COLORS[state.mySeat],
+    boxShadow: "0 0 6px rgba(255,255,255,.3)"
+  } }), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { color: "#f4e9d8", fontSize: 15, fontWeight: 800 } }, myHand.length === 1 ? /* @__PURE__ */ React.createElement("span", { style: { color: "#ff5252" } }, "BIG2! \u{1F525}") : `${myHand.length} \u0E43\u0E1A`), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#8a9a8e" } }, "\u0E44\u0E1E\u0E48\u0E43\u0E19\u0E21\u0E37\u0E2D\u0E04\u0E38\u0E13"))), /* @__PURE__ */ React.createElement("div", { style: styles.statBox }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 18, fontWeight: 900, color: state.cumulative[state.mySeat] >= 0 ? "#6fbf8a" : "#e08a8a" } }, state.cumulative[state.mySeat] >= 0 ? "+" : "", state.cumulative[state.mySeat]), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "#8a9a8e" } }, "\u0E04\u0E30\u0E41\u0E19\u0E19\u0E2A\u0E30\u0E2A\u0E21")))), /* @__PURE__ */ React.createElement(Hand, { cards: myHand, selected, onToggle: toggleSelect }), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, marginTop: 8 } }, /* @__PURE__ */ React.createElement("button", { style: __spreadProps(__spreadValues({}, styles.goldBtn), { flex: 1, opacity: isMyTurn && selected.length ? 1 : 0.5 }), disabled: !isMyTurn || selected.length === 0, onClick: () => playSelected() }, "\u0E25\u0E07\u0E44\u0E1E\u0E48 (", selected.length, ")"), /* @__PURE__ */ React.createElement("button", { style: __spreadProps(__spreadValues({}, styles.greenBtn), { flex: 1, opacity: isMyTurn ? 1 : 0.5 }), disabled: !isMyTurn, onClick: passTurn }, "\u0E1C\u0E48\u0E32\u0E19"))), state.phase === "finished" && /* @__PURE__ */ React.createElement("div", { style: styles.modalOverlay }, /* @__PURE__ */ React.createElement("div", { style: styles.modalCard }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 40, textAlign: "center" } }, "\u{1F389}"), /* @__PURE__ */ React.createElement("div", { style: { color: "#d4af37", fontWeight: 700, fontSize: 16, textAlign: "center", marginTop: 4 } }, state.players[state.finished[0]] || `\u0E1A\u0E2D\u0E17 ${state.finished[0] + 1}`, " \u0E0A\u0E19\u0E30\u0E23\u0E2D\u0E1A\u0E17\u0E35\u0E48 ", state.round, "!"), /* @__PURE__ */ React.createElement("div", { style: { marginTop: 16 } }, [state.mySeat, ...[0, 1, 2, 3].filter((s) => s !== state.mySeat)].map((s) => {
+    const delta = state.payout ? state.payout.net[s] : 0;
+    const hand = state.allHands ? state.allHands[s] : [];
+    const pts = handPoints(hand);
+    return /* @__PURE__ */ React.createElement("div", { key: s, style: { marginBottom: 10 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#f4e9d8", fontWeight: 600, marginBottom: 4, textAlign: "center" } }, s === state.mySeat ? "\u0E04\u0E38\u0E13" : state.players[s] || `\u0E1A\u0E2D\u0E17 ${s + 1}`, s === state.finished[0] ? " \u2014 \u0E0A\u0E19\u0E30 \u{1F3C6}" : ` \u2014 \u0E40\u0E2B\u0E25\u0E37\u0E2D ${pts} point`, " ", /* @__PURE__ */ React.createElement("span", { style: { color: delta >= 0 ? "#6fbf8a" : "#e08a8a", fontWeight: 700 } }, "(", delta >= 0 ? "+" : "", delta, ")")), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 3, flexWrap: "wrap", justifyContent: "center" } }, hand.length === 0 ? /* @__PURE__ */ React.createElement("span", { style: { color: "#6fbf8a", fontSize: 12 } }, "\u0E2B\u0E21\u0E14\u0E44\u0E1E\u0E48") : hand.map((c) => /* @__PURE__ */ React.createElement(PlayingCard, { key: cardKey(c), card: c, small: true }))));
+  })), state.mySeat === state.finished[0] || state.players[state.finished[0]] === null && state.mySeat === 0 ? /* @__PURE__ */ React.createElement("button", { style: __spreadProps(__spreadValues({}, styles.goldBtn), { marginTop: 14 }), onClick: nextRound }, "\u0E40\u0E23\u0E34\u0E48\u0E21\u0E23\u0E2D\u0E1A\u0E15\u0E48\u0E2D\u0E44\u0E1B") : /* @__PURE__ */ React.createElement("p", { style: { color: "#8a9a8e", fontSize: 12, marginTop: 10, textAlign: "center" } }, "\u0E23\u0E2D\u0E1C\u0E39\u0E49\u0E0A\u0E19\u0E30\u0E01\u0E14\u0E40\u0E23\u0E34\u0E48\u0E21\u0E23\u0E2D\u0E1A\u0E15\u0E48\u0E2D\u0E44\u0E1B...")))));
 }
 ReactDOM.createRoot(document.getElementById("root")).render(/* @__PURE__ */ React.createElement(App, null));
