@@ -9,7 +9,7 @@ const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
 const {
-  cardKey, cardValue, dealFour, findStartPlayer, classifyCombo, comboBeats,
+  cardKey, dealFour, findStartPlayer, classifyCombo, comboBeats,
   computePayouts, resolveNextTurn, getForcedHighCard,
 } = require("./gameLogic");
 
@@ -72,6 +72,12 @@ function broadcastState(code) {
   }
 }
 
+function cumulativeScores(room) {
+  const totals = [0, 0, 0, 0];
+  room.roundHistory.forEach(r => { r.net.forEach((v, i) => { totals[i] += v; }); });
+  return totals;
+}
+
 function sanitizeForSeat(room, seat) {
   return {
     code: room.code,
@@ -80,6 +86,8 @@ function sanitizeForSeat(room, seat) {
     mySeat: seat,
     myHand: room.hands[seat] || [],
     handCounts: room.hands.map(h => h.length),
+    // reveal everyone's actual hands only once the round is over — never during active play
+    allHands: room.phase === "finished" ? room.hands : null,
     turn: room.turn,
     turnStartedAt: room.turnStartedAt,
     turnSeconds: TURN_SECONDS,
@@ -89,6 +97,7 @@ function sanitizeForSeat(room, seat) {
     finished: room.finished,
     round: room.round,
     roundHistory: room.roundHistory,
+    cumulative: cumulativeScores(room),
     payout: room.payout,
     everPlayed: room.everPlayed,
   };
@@ -277,7 +286,7 @@ function autoTimeout(room) {
   const hand = room.hands[seat];
   let move = null;
   if (room.lastPlayerSeat === null || room.lastPlayerSeat === seat) {
-    move = [[...hand].sort((a, b) => cardValue(a) - cardValue(b))[0]];
+    move = [[...hand].sort((a, b) => require("./gameLogic").cardValue(a) - require("./gameLogic").cardValue(b))[0]];
   } else {
     const forced = getForcedHighCard(
       { hands: room.hands, finished: room.finished, passedThisTrick: room.passedThisTrick, lastPlayerSeat: room.lastPlayerSeat, lastPlay: room.lastPlay },
