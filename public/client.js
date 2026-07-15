@@ -200,16 +200,15 @@ function Table({ mySeat, players, handCounts, turn, trickPile, finished, passedT
       border: active ? "none" : `2px solid ${color}`,
       boxShadow: active ? "none" : "0 2px 6px rgba(0,0,0,.3)"
     } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#f4e9d8", fontWeight: 700 } }, players[seat] || `\u0E1A\u0E2D\u0E17 ${seat + 1}`, finished.includes(seat) && " \u2705"), big2 ? /* @__PURE__ */ React.createElement("div", { style: { fontSize: 15, fontWeight: 900, color: "#ff5252" } }, "BIG2! \u{1F525}") : /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: active ? "#d4af37" : "#8a9a8e" } }, passed ? "\u0E1C\u0E48\u0E32\u0E19" : `${handCounts[seat]} \u0E43\u0E1A`), cumulative && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: score >= 0 ? "#6fbf8a" : "#e08a8a" } }, score >= 0 ? "+" : "", score));
-    if (!active) return inner;
-    const elapsed = turnStartedAt ? Date.now() - turnStartedAt : 0;
-    const elapsedFrac = Math.max(0, Math.min(1, elapsed / ((turnSeconds || 30) * 1e3)));
-    const deg = elapsedFrac * 360;
-    return /* @__PURE__ */ React.createElement("div", { style: {
-      padding: 3,
-      borderRadius: 14,
-      background: `conic-gradient(rgba(255,255,255,.18) ${deg}deg, ${color} ${deg}deg)`,
-      boxShadow: `0 0 12px ${color}99`
-    } }, inner);
+    let ringBg = "transparent", ringShadow = "none";
+    if (active) {
+      const elapsed = turnStartedAt ? Date.now() - turnStartedAt : 0;
+      const elapsedFrac = Math.max(0, Math.min(1, elapsed / ((turnSeconds || 30) * 1e3)));
+      const deg = elapsedFrac * 360;
+      ringBg = `conic-gradient(rgba(255,255,255,.18) ${deg}deg, ${color} ${deg}deg)`;
+      ringShadow = `0 0 12px ${color}99`;
+    }
+    return /* @__PURE__ */ React.createElement("div", { style: { padding: 3, borderRadius: 14, background: ringBg, boxShadow: ringShadow } }, inner);
   }
   return /* @__PURE__ */ React.createElement("div", { style: { width: "100%", marginBottom: 12 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "center", marginBottom: 10 } }, /* @__PURE__ */ React.createElement(Seat, { seat: bySeat.top })), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 12 } }, /* @__PURE__ */ React.createElement(Seat, { seat: bySeat.left }), /* @__PURE__ */ React.createElement("div", { ref: feltRef, style: {
     position: "relative",
