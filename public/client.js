@@ -56,6 +56,10 @@ function PlayingCard({ card, selected, onClick, small, large, style }) {
 function Hand({ cards, selected, onToggle }) {
   const ref = useRef(null);
   const [w, setW] = useState(360);
+  const [order, setOrder] = useState(() => cards.map(cardKey));
+  const [dragKey, setDragKey] = useState(null);
+  const [dragX, setDragX] = useState(0);
+  const dragInfo = useRef({ startClientX: 0, startLeft: 0, moved: false });
   useEffect(() => {
     function measure() {
       if (ref.current) setW(ref.current.offsetWidth || 360);
@@ -64,18 +68,81 @@ function Hand({ cards, selected, onToggle }) {
     window.addEventListener("resize", measure);
     return () => window.removeEventListener("resize", measure);
   }, []);
-  const CARD_W = 68, gap = cards.length > 1 ? Math.min(CARD_W * 0.66, Math.max(14, (w - CARD_W) / (cards.length - 1))) : 0;
-  const totalW = cards.length > 0 ? gap * (cards.length - 1) + CARD_W : CARD_W;
-  return /* @__PURE__ */ React.createElement("div", { ref, style: { position: "relative", height: 118, width: "100%" } }, /* @__PURE__ */ React.createElement("div", { style: { position: "relative", height: 118, width: totalW, margin: "0 auto" } }, cards.map((c, i) => {
-    const isSel = selected.some((s) => cardKey(s) === cardKey(c));
-    return /* @__PURE__ */ React.createElement("div", { key: cardKey(c), onClick: () => onToggle(c), style: {
-      position: "absolute",
-      left: i * gap,
-      top: isSel ? -14 : 0,
-      transform: `rotate(${(i - (cards.length - 1) / 2) * (gap < 30 ? 1 : 1.4)}deg)`,
-      transition: "left .18s, top .18s, transform .18s",
-      zIndex: i
-    } }, /* @__PURE__ */ React.createElement(PlayingCard, { card: c, large: true, selected: isSel }));
+  const cardsSignature = cards.map(cardKey).join(",");
+  useEffect(() => {
+    const keys = cards.map(cardKey);
+    setOrder((prev) => {
+      const kept = prev.filter((k) => keys.includes(k));
+      const added = keys.filter((k) => !kept.includes(k));
+      return [...kept, ...added];
+    });
+  }, [cardsSignature]);
+  const CARD_W = 68;
+  const orderedCards = order.map((k) => cards.find((c) => cardKey(c) === k)).filter(Boolean);
+  const n = orderedCards.length;
+  const gap = n > 1 ? Math.min(CARD_W * 0.66, Math.max(14, (w - CARD_W) / (n - 1))) : 0;
+  const totalW = n > 0 ? gap * (n - 1) + CARD_W : CARD_W;
+  const center = (n - 1) / 2;
+  function handlePointerDown(e, key) {
+    const idx = order.indexOf(key);
+    e.currentTarget.setPointerCapture(e.pointerId);
+    setDragKey(key);
+    dragInfo.current = { startClientX: e.clientX, startLeft: idx * gap, moved: false };
+  }
+  function handlePointerMove(e) {
+    if (!dragKey) return;
+    const deltaX = e.clientX - dragInfo.current.startClientX;
+    if (Math.abs(deltaX) > 5) dragInfo.current.moved = true;
+    setDragX(deltaX);
+    const targetLeft = dragInfo.current.startLeft + deltaX;
+    let targetIndex = Math.round(targetLeft / (gap || 1));
+    targetIndex = Math.max(0, Math.min(n - 1, targetIndex));
+    const currentIndex = order.indexOf(dragKey);
+    if (targetIndex !== currentIndex) {
+      setOrder((prev) => {
+        const next = [...prev];
+        next.splice(currentIndex, 1);
+        next.splice(targetIndex, 0, dragKey);
+        return next;
+      });
+    }
+  }
+  function handlePointerUp(e, key, card) {
+    const wasDrag = dragInfo.current.moved;
+    setDragKey(null);
+    setDragX(0);
+    if (!wasDrag) onToggle(card);
+  }
+  return /* @__PURE__ */ React.createElement("div", { ref, style: { position: "relative", height: 118, width: "100%" } }, /* @__PURE__ */ React.createElement("div", { style: { position: "relative", height: 118, width: totalW, margin: "0 auto" } }, orderedCards.map((c, i) => {
+    const key = cardKey(c);
+    const isDragging = key === dragKey;
+    const isSel = selected.some((s) => cardKey(s) === key);
+    const baseLeft = i * gap;
+    const left = isDragging ? dragInfo.current.startLeft + dragX : baseLeft;
+    const tilt = (i - center) * (gap < 30 ? 1.1 : 1.6);
+    return /* @__PURE__ */ React.createElement(
+      "div",
+      {
+        key,
+        onPointerDown: (e) => handlePointerDown(e, key),
+        onPointerMove: handlePointerMove,
+        onPointerUp: (e) => handlePointerUp(e, key, c),
+        onPointerCancel: () => {
+          setDragKey(null);
+          setDragX(0);
+        },
+        style: {
+          position: "absolute",
+          left,
+          top: isDragging ? 0 : isSel ? -14 : 0,
+          transform: isDragging ? "scale(1.06)" : `rotate(${tilt}deg)`,
+          transition: isDragging ? "none" : "left .18s, top .18s, transform .18s",
+          zIndex: isDragging ? 50 : isSel ? 30 + i : i,
+          touchAction: "none"
+        }
+      },
+      /* @__PURE__ */ React.createElement(PlayingCard, { card: c, large: true, selected: isSel && !isDragging, style: isDragging ? { boxShadow: "0 10px 18px rgba(0,0,0,.5)" } : void 0 })
+    );
   })));
 }
 function TrickPile({ trickPile }) {
@@ -153,31 +220,61 @@ const styles = {
   modalCard: { background: "#0f1f3a", border: "1px solid #2f5f8f", borderRadius: 16, padding: "22px 18px", width: "100%", maxWidth: 380, maxHeight: "80vh", overflowY: "auto", boxShadow: "0 8px 32px rgba(0,0,0,.5)" }
 };
 function HistoryModal({ roundHistory, players, mySeat, cumulative, onClose }) {
+  const [viewRound, setViewRound] = useState(null);
   function valueFor(row, colSeat) {
     const colName = players[colSeat];
     if (!row.players || colName === null) return row.net[colSeat];
     const idx = row.players.indexOf(colName);
     return idx === -1 ? null : row.net[idx];
   }
-  return /* @__PURE__ */ React.createElement("div", { style: styles.modalOverlay, onClick: onClose }, /* @__PURE__ */ React.createElement("div", { style: styles.modalCard, onClick: (e) => e.stopPropagation() }, /* @__PURE__ */ React.createElement("h2", { style: { color: "#d4af37", textAlign: "center", marginBottom: 12 } }, "\u0E1B\u0E23\u0E30\u0E27\u0E31\u0E15\u0E34\u0E04\u0E30\u0E41\u0E19\u0E19"), !roundHistory || roundHistory.length === 0 ? /* @__PURE__ */ React.createElement("p", { style: { color: "#8a9a8e", textAlign: "center" } }, "\u0E22\u0E31\u0E07\u0E44\u0E21\u0E48\u0E21\u0E35\u0E23\u0E2D\u0E1A\u0E17\u0E35\u0E48\u0E08\u0E1A\u0E04\u0E23\u0E31\u0E1A") : /* @__PURE__ */ React.createElement("div", { style: { overflowX: "auto" } }, /* @__PURE__ */ React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: 12 } }, /* @__PURE__ */ React.createElement("thead", null, /* @__PURE__ */ React.createElement("tr", null, /* @__PURE__ */ React.createElement("th", { style: { color: "#8a9a8e", padding: "4px 8px", textAlign: "center", borderBottom: "1px solid #2f5f8f" } }, "\u0E23\u0E2D\u0E1A"), [0, 1, 2, 3].map((s) => /* @__PURE__ */ React.createElement("th", { key: s, style: { color: "#8a9a8e", padding: "4px 8px", textAlign: "center", borderBottom: "1px solid #2f5f8f", whiteSpace: "nowrap" } }, s === mySeat ? "\u0E04\u0E38\u0E13" : players[s] || `\u0E1A\u0E2D\u0E17 ${s + 1}`)))), /* @__PURE__ */ React.createElement("tbody", null, roundHistory.map((r) => /* @__PURE__ */ React.createElement("tr", { key: r.round }, /* @__PURE__ */ React.createElement("td", { style: { color: "#f4e9d8", padding: "4px 8px", textAlign: "center", borderBottom: "1px solid rgba(255,255,255,.05)" } }, r.round), [0, 1, 2, 3].map((s) => {
+  return /* @__PURE__ */ React.createElement("div", { style: styles.modalOverlay, onClick: onClose }, /* @__PURE__ */ React.createElement("div", { style: styles.modalCard, onClick: (e) => e.stopPropagation() }, /* @__PURE__ */ React.createElement("h2", { style: { color: "#d4af37", textAlign: "center", marginBottom: 12 } }, "\u0E1B\u0E23\u0E30\u0E27\u0E31\u0E15\u0E34\u0E04\u0E30\u0E41\u0E19\u0E19"), !roundHistory || roundHistory.length === 0 ? /* @__PURE__ */ React.createElement("p", { style: { color: "#8a9a8e", textAlign: "center" } }, "\u0E22\u0E31\u0E07\u0E44\u0E21\u0E48\u0E21\u0E35\u0E23\u0E2D\u0E1A\u0E17\u0E35\u0E48\u0E08\u0E1A\u0E04\u0E23\u0E31\u0E1A") : /* @__PURE__ */ React.createElement("div", { style: { overflowX: "auto" } }, /* @__PURE__ */ React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: 12 } }, /* @__PURE__ */ React.createElement("thead", null, /* @__PURE__ */ React.createElement("tr", null, /* @__PURE__ */ React.createElement("th", { style: { color: "#8a9a8e", padding: "4px 8px", textAlign: "center", borderBottom: "1px solid #2f5f8f" } }, "\u0E23\u0E2D\u0E1A"), [0, 1, 2, 3].map((s) => /* @__PURE__ */ React.createElement("th", { key: s, style: { color: "#8a9a8e", padding: "4px 8px", textAlign: "center", borderBottom: "1px solid #2f5f8f", whiteSpace: "nowrap" } }, s === mySeat ? "\u0E04\u0E38\u0E13" : players[s] || `\u0E1A\u0E2D\u0E17 ${s + 1}`)), /* @__PURE__ */ React.createElement("th", { style: { color: "#8a9a8e", padding: "4px 8px", textAlign: "center", borderBottom: "1px solid #2f5f8f" } }))), /* @__PURE__ */ React.createElement("tbody", null, roundHistory.map((r) => /* @__PURE__ */ React.createElement("tr", { key: r.round }, /* @__PURE__ */ React.createElement("td", { style: { color: "#f4e9d8", padding: "4px 8px", textAlign: "center", borderBottom: "1px solid rgba(255,255,255,.05)" } }, r.round), [0, 1, 2, 3].map((s) => {
     const v = valueFor(r, s);
     return /* @__PURE__ */ React.createElement("td", { key: s, style: { padding: "4px 8px", textAlign: "center", borderBottom: "1px solid rgba(255,255,255,.05)", color: v === null ? "#5a7a9f" : v >= 0 ? "#6fbf8a" : "#e08a8a" } }, v === null ? "\u2014" : `${v >= 0 ? "+" : ""}${v}`);
-  }))), /* @__PURE__ */ React.createElement("tr", null, /* @__PURE__ */ React.createElement("td", { style: { color: "#d4af37", fontWeight: 700, padding: "4px 8px", textAlign: "center" } }, "\u0E23\u0E27\u0E21"), cumulative.map((v, s) => /* @__PURE__ */ React.createElement("td", { key: s, style: { color: v >= 0 ? "#6fbf8a" : "#e08a8a", fontWeight: 700, padding: "4px 8px", textAlign: "center" } }, v >= 0 ? "+" : "", v)))))), /* @__PURE__ */ React.createElement("button", { style: __spreadProps(__spreadValues({}, styles.goldBtn), { marginTop: 16 }), onClick: onClose }, "\u0E1B\u0E34\u0E14")));
+  }), /* @__PURE__ */ React.createElement("td", { style: { padding: "4px 6px", textAlign: "center", borderBottom: "1px solid rgba(255,255,255,.05)" } }, /* @__PURE__ */ React.createElement("button", { onClick: () => setViewRound(r), style: { padding: "3px 8px", borderRadius: 6, border: "1px solid #d4af37", background: "transparent", color: "#d4af37", fontSize: 10, cursor: "pointer", whiteSpace: "nowrap" } }, "\u0E2A\u0E23\u0E38\u0E1B")))), /* @__PURE__ */ React.createElement("tr", null, /* @__PURE__ */ React.createElement("td", { style: { color: "#d4af37", fontWeight: 700, padding: "4px 8px", textAlign: "center" } }, "\u0E23\u0E27\u0E21"), cumulative.map((v, s) => /* @__PURE__ */ React.createElement("td", { key: s, style: { color: v >= 0 ? "#6fbf8a" : "#e08a8a", fontWeight: 700, padding: "4px 8px", textAlign: "center" } }, v >= 0 ? "+" : "", v)), /* @__PURE__ */ React.createElement("td", null))))), /* @__PURE__ */ React.createElement("button", { style: __spreadProps(__spreadValues({}, styles.goldBtn), { marginTop: 16 }), onClick: onClose }, "\u0E1B\u0E34\u0E14")), viewRound && /* @__PURE__ */ React.createElement("div", { style: __spreadProps(__spreadValues({}, styles.modalOverlay), { zIndex: 1200 }), onClick: (e) => {
+    e.stopPropagation();
+    setViewRound(null);
+  } }, /* @__PURE__ */ React.createElement("div", { style: styles.modalCard, onClick: (e) => e.stopPropagation() }, /* @__PURE__ */ React.createElement("h2", { style: { color: "#d4af37", textAlign: "center", marginBottom: 12 } }, "\u0E2A\u0E23\u0E38\u0E1B\u0E23\u0E2D\u0E1A\u0E17\u0E35\u0E48 ", viewRound.round), [0, 1, 2, 3].map((s) => {
+    const nm = viewRound.players && viewRound.players[s] || players[s] || `\u0E1A\u0E2D\u0E17 ${s + 1}`;
+    const cardsLeft = viewRound.cardsLeft[s];
+    const score = viewRound.scores[s];
+    const net = viewRound.net[s];
+    const mult = cardsLeft >= 12 ? 3 : cardsLeft >= 10 ? 2 : 1;
+    const isWinner = cardsLeft === 0;
+    return /* @__PURE__ */ React.createElement("div", { key: s, style: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, padding: "8px 10px", marginBottom: 6, borderRadius: 8, background: "rgba(255,255,255,.05)" } }, /* @__PURE__ */ React.createElement("span", { style: { color: "#f4e9d8", fontSize: 13, fontWeight: 600 } }, nm, isWinner && " \u{1F3C6}"), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: "#8a9a8e", textAlign: "center" } }, isWinner ? "\u0E0A\u0E19\u0E30" : `\u0E40\u0E2B\u0E25\u0E37\u0E2D ${cardsLeft} \u0E43\u0E1A \xB7 ${score} pt${mult > 1 ? ` (x${mult})` : ""}`), /* @__PURE__ */ React.createElement("span", { style: { color: net >= 0 ? "#6fbf8a" : "#e08a8a", fontWeight: 700, fontSize: 13 } }, net >= 0 ? "+" : "", net));
+  }), /* @__PURE__ */ React.createElement("button", { style: __spreadProps(__spreadValues({}, styles.goldBtn), { marginTop: 12 }), onClick: () => setViewRound(null) }, "\u0E1B\u0E34\u0E14"))));
 }
 function ChatPanel({ chat, chatInput, setChatInput, sendChat, mySeat }) {
+  const [open, setOpen] = useState(false);
+  const [unread, setUnread] = useState(0);
+  const openRef = useRef(false);
   const listRef = useRef(null);
+  const prevLenRef = useRef(chat.length);
   useEffect(() => {
-    if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight;
+    if (chat.length > prevLenRef.current && !openRef.current) setUnread((u) => u + (chat.length - prevLenRef.current));
+    prevLenRef.current = chat.length;
+    if (openRef.current && listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight;
   }, [chat]);
-  return /* @__PURE__ */ React.createElement("div", { style: {
-    marginTop: 10,
+  function toggle() {
+    const next = !open;
+    openRef.current = next;
+    setOpen(next);
+    if (next) setUnread(0);
+  }
+  const lastMsg = chat.length ? chat[chat.length - 1] : null;
+  return /* @__PURE__ */ React.createElement("div", { style: { position: "relative", marginTop: 10 } }, open && /* @__PURE__ */ React.createElement("div", { style: {
+    position: "absolute",
+    bottom: "calc(100% + 6px)",
+    left: 0,
+    right: 0,
+    zIndex: 200,
     background: "#0f1f3a",
     border: "1px solid #2f5f8f",
     borderRadius: 12,
     overflow: "hidden",
     display: "flex",
-    flexDirection: "column"
-  } }, /* @__PURE__ */ React.createElement("div", { style: { padding: "6px 10px", borderBottom: "1px solid #2f5f8f", color: "#d4af37", fontWeight: 700, fontSize: 12 } }, "\u{1F4AC} \u0E41\u0E0A\u0E17"), /* @__PURE__ */ React.createElement("div", { ref: listRef, style: { height: 100, overflowY: "auto", padding: "6px 10px" } }, chat.length === 0 && /* @__PURE__ */ React.createElement("div", { style: { color: "#5a7a9f", fontSize: 11, textAlign: "center", marginTop: 14 } }, "\u0E22\u0E31\u0E07\u0E44\u0E21\u0E48\u0E21\u0E35\u0E02\u0E49\u0E2D\u0E04\u0E27\u0E32\u0E21"), chat.map((m, i) => {
+    flexDirection: "column",
+    boxShadow: "0 8px 24px rgba(0,0,0,.5)"
+  } }, /* @__PURE__ */ React.createElement("div", { ref: listRef, style: { height: 160, overflowY: "auto", padding: "8px 10px" } }, chat.length === 0 && /* @__PURE__ */ React.createElement("div", { style: { color: "#5a7a9f", fontSize: 11, textAlign: "center", marginTop: 14 } }, "\u0E22\u0E31\u0E07\u0E44\u0E21\u0E48\u0E21\u0E35\u0E02\u0E49\u0E2D\u0E04\u0E27\u0E32\u0E21"), chat.map((m, i) => {
     const mine = m.seat === mySeat;
     return /* @__PURE__ */ React.createElement("div", { key: i, style: { marginBottom: 6, textAlign: mine ? "right" : "left" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 9, color: SEAT_COLORS[m.seat] || "#8a9a8e", fontWeight: 700, marginBottom: 1 } }, m.name), /* @__PURE__ */ React.createElement("span", { style: {
       display: "inline-block",
@@ -193,6 +290,7 @@ function ChatPanel({ chat, chatInput, setChatInput, sendChat, mySeat }) {
   })), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6, padding: 6, borderTop: "1px solid #2f5f8f" } }, /* @__PURE__ */ React.createElement(
     "input",
     {
+      autoFocus: true,
       value: chatInput,
       onChange: (e) => setChatInput(e.target.value),
       onKeyDown: (e) => {
@@ -202,7 +300,38 @@ function ChatPanel({ chat, chatInput, setChatInput, sendChat, mySeat }) {
       maxLength: 200,
       style: { flex: 1, padding: "7px 10px", borderRadius: 8, border: "1px solid #3a5a7f", background: "#132747", color: "#f4e9d8", fontSize: 12 }
     }
-  ), /* @__PURE__ */ React.createElement("button", { onClick: sendChat, style: { padding: "7px 12px", borderRadius: 8, border: "none", background: "#d4af37", color: "#1a1a1a", fontWeight: 700, fontSize: 12 } }, "\u0E2A\u0E48\u0E07")));
+  ), /* @__PURE__ */ React.createElement("button", { onClick: sendChat, style: { padding: "7px 12px", borderRadius: 8, border: "none", background: "#d4af37", color: "#1a1a1a", fontWeight: 700, fontSize: 12 } }, "\u0E2A\u0E48\u0E07"))), /* @__PURE__ */ React.createElement(
+    "div",
+    {
+      onClick: toggle,
+      style: {
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        padding: "8px 12px",
+        borderRadius: 10,
+        background: "#0f1f3a",
+        border: "1px solid #2f5f8f",
+        cursor: "pointer"
+      }
+    },
+    /* @__PURE__ */ React.createElement("span", { style: { fontSize: 16 } }, "\u{1F4AC}"),
+    /* @__PURE__ */ React.createElement("span", { style: { flex: 1, fontSize: 12, color: lastMsg ? "#f4e9d8" : "#5a7a9f", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } }, lastMsg ? `${lastMsg.name}: ${lastMsg.text}` : "\u0E41\u0E15\u0E30\u0E40\u0E1E\u0E37\u0E48\u0E2D\u0E41\u0E0A\u0E17..."),
+    unread > 0 && /* @__PURE__ */ React.createElement("span", { style: {
+      background: "#e63946",
+      color: "#fff",
+      fontSize: 10,
+      fontWeight: 800,
+      borderRadius: "50%",
+      minWidth: 18,
+      height: 18,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      padding: "0 4px"
+    } }, unread > 9 ? "9+" : unread),
+    /* @__PURE__ */ React.createElement("span", { style: { color: "#8a9a8e", fontSize: 11 } }, open ? "\u25BC" : "\u25B2")
+  ));
 }
 function App() {
   const socketRef = useRef(null);
@@ -295,8 +424,9 @@ function App() {
   }
   const myHand = state.myHand || [];
   const isMyTurn = state.turn === state.mySeat && state.phase === "playing";
+  const isLeadPlayer = state.mySeat === state.players.findIndex((p) => p !== null);
   const secsLeft = state.turnStartedAt ? Math.max(0, Math.ceil(state.turnSeconds - (Date.now() - state.turnStartedAt) / 1e3)) : null;
-  return /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { style: styles.bg }, /* @__PURE__ */ React.createElement("div", { style: styles.wrap }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 } }, /* @__PURE__ */ React.createElement("span", { style: { color: "#d4af37", fontWeight: 700 } }, "\u0E2B\u0E49\u0E2D\u0E07 ", state.code, " \xB7 \u0E23\u0E2D\u0E1A\u0E17\u0E35\u0E48 ", state.round), state.matchRoundsRemaining !== null ? /* @__PURE__ */ React.createElement("span", { style: styles.matchBadgeActive }, "\u{1F3C1} \u0E40\u0E2B\u0E25\u0E37\u0E2D\u0E2D\u0E35\u0E01 ", state.matchRoundsRemaining, " \u0E15\u0E32") : state.mySeat === 0 && /* @__PURE__ */ React.createElement("span", { onClick: startLastRounds, style: styles.matchBadge }, "\u{1F3C1} 4 \u0E15\u0E32\u0E2A\u0E38\u0E14\u0E17\u0E49\u0E32\u0E22")), /* @__PURE__ */ React.createElement(
+  return /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { style: styles.bg }, /* @__PURE__ */ React.createElement("div", { style: styles.wrap }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 } }, /* @__PURE__ */ React.createElement("span", { style: { color: "#d4af37", fontWeight: 700 } }, "\u0E2B\u0E49\u0E2D\u0E07 ", state.code, " \xB7 \u0E23\u0E2D\u0E1A\u0E17\u0E35\u0E48 ", state.round), state.matchRoundsRemaining !== null ? /* @__PURE__ */ React.createElement("span", { style: styles.matchBadgeActive }, "\u{1F3C1} \u0E40\u0E2B\u0E25\u0E37\u0E2D\u0E2D\u0E35\u0E01 ", state.matchRoundsRemaining, " \u0E15\u0E32") : isLeadPlayer && /* @__PURE__ */ React.createElement("span", { onClick: startLastRounds, style: styles.matchBadge }, "\u{1F3C1} 4 \u0E15\u0E32\u0E2A\u0E38\u0E14\u0E17\u0E49\u0E32\u0E22")), /* @__PURE__ */ React.createElement(
     Table,
     {
       mySeat: state.mySeat,
@@ -328,7 +458,7 @@ function App() {
     return /* @__PURE__ */ React.createElement("div", { style: styles.modalOverlay }, /* @__PURE__ */ React.createElement("div", { style: styles.modalCard }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 40, textAlign: "center" } }, "\u{1F3C1}"), /* @__PURE__ */ React.createElement("div", { style: { color: "#d4af37", fontWeight: 700, fontSize: 18, textAlign: "center", marginTop: 4, marginBottom: 16 } }, "\u0E08\u0E1A\u0E41\u0E21\u0E15\u0E0A\u0E4C!"), /* @__PURE__ */ React.createElement("div", null, [state.mySeat, ...[0, 1, 2, 3].filter((s) => s !== state.mySeat)].sort((a, b) => (finalScores[b] || 0) - (finalScores[a] || 0)).map((s, i) => {
       const score = finalScores[s] || 0;
       return /* @__PURE__ */ React.createElement("div", { key: s, style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 12px", marginBottom: 6, borderRadius: 10, background: i === 0 ? "rgba(212,175,55,.15)" : "rgba(255,255,255,.05)", border: i === 0 ? "1px solid #d4af37" : "1px solid transparent" } }, /* @__PURE__ */ React.createElement("span", { style: { color: "#f4e9d8", fontWeight: 600, fontSize: 14 } }, i === 0 && "\u{1F3C6} ", s === state.mySeat ? "\u0E04\u0E38\u0E13" : state.players[s] || `\u0E1A\u0E2D\u0E17 ${s + 1}`), /* @__PURE__ */ React.createElement("span", { style: { color: score >= 0 ? "#6fbf8a" : "#e08a8a", fontWeight: 900, fontSize: 16 } }, score >= 0 ? "+" : "", score));
-    })), state.mySeat === 0 ? /* @__PURE__ */ React.createElement("button", { style: __spreadProps(__spreadValues({}, styles.goldBtn), { marginTop: 16 }), onClick: restartMatch }, "\u0E40\u0E25\u0E48\u0E19\u0E41\u0E21\u0E15\u0E0A\u0E4C\u0E43\u0E2B\u0E21\u0E48") : /* @__PURE__ */ React.createElement("p", { style: { color: "#8a9a8e", fontSize: 12, marginTop: 14, textAlign: "center" } }, "\u0E23\u0E2D\u0E40\u0E08\u0E49\u0E32\u0E02\u0E2D\u0E07\u0E2B\u0E49\u0E2D\u0E07\u0E40\u0E23\u0E34\u0E48\u0E21\u0E41\u0E21\u0E15\u0E0A\u0E4C\u0E43\u0E2B\u0E21\u0E48...")));
+    })), isLeadPlayer ? /* @__PURE__ */ React.createElement("button", { style: __spreadProps(__spreadValues({}, styles.goldBtn), { marginTop: 16 }), onClick: restartMatch }, "\u0E40\u0E25\u0E48\u0E19\u0E41\u0E21\u0E15\u0E0A\u0E4C\u0E43\u0E2B\u0E21\u0E48") : /* @__PURE__ */ React.createElement("p", { style: { color: "#8a9a8e", fontSize: 12, marginTop: 14, textAlign: "center" } }, "\u0E23\u0E2D\u0E40\u0E08\u0E49\u0E32\u0E02\u0E2D\u0E07\u0E2B\u0E49\u0E2D\u0E07\u0E40\u0E23\u0E34\u0E48\u0E21\u0E41\u0E21\u0E15\u0E0A\u0E4C\u0E43\u0E2B\u0E21\u0E48...")));
   })())), showHistory && /* @__PURE__ */ React.createElement(HistoryModal, { roundHistory: state.roundHistory, players: state.players, mySeat: state.mySeat, cumulative: state.cumulative, onClose: () => setShowHistory(false) }));
 }
 ReactDOM.createRoot(document.getElementById("root")).render(/* @__PURE__ */ React.createElement(App, null));
