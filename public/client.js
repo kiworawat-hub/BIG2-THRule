@@ -137,7 +137,7 @@ function Hand({ cards, selected, onToggle }) {
           top: isDragging ? 0 : isSel ? -14 : 0,
           transform: isDragging ? "scale(1.06)" : `rotate(${tilt}deg)`,
           transition: isDragging ? "none" : "left .18s, top .18s, transform .18s",
-          zIndex: isDragging ? 50 : isSel ? 30 + i : i,
+          zIndex: isDragging ? 50 : i,
           touchAction: "none"
         }
       },
@@ -145,22 +145,41 @@ function Hand({ cards, selected, onToggle }) {
     );
   })));
 }
-function TrickPile({ trickPile }) {
+function TrickPile({ trickPile, feltWidth }) {
   if (!trickPile || trickPile.length === 0) return /* @__PURE__ */ React.createElement("div", { style: { color: "rgba(244,233,216,.35)", fontSize: 12 } }, "\u0E42\u0E15\u0E4A\u0E30");
-  const n = trickPile.length, maxX = 40, maxY = 22;
+  const n = trickPile.length;
+  const W = feltWidth || 160;
+  const maxX = Math.min(34, W * 0.14), maxY = 16;
   const stepX = n > 1 ? maxX / (n - 1) : 0, stepY = n > 1 ? maxY / (n - 1) : 0;
-  return /* @__PURE__ */ React.createElement("div", { style: { position: "absolute", left: "50%", top: "50%", transform: "translate(-50%,-50%)" } }, trickPile.map((entry, i) => /* @__PURE__ */ React.createElement("div", { key: i, style: {
-    position: "absolute",
-    left: i * stepX - maxX / 2,
-    top: maxY / 2 - i * stepY,
-    transform: "translate(-50%,-50%)",
-    zIndex: i,
-    display: "flex",
-    gap: 2,
-    filter: i < n - 1 ? "brightness(0.8)" : "none"
-  } }, entry.cards.map((c) => /* @__PURE__ */ React.createElement(PlayingCard, { key: cardKey(c), card: c, small: true })))));
+  const SMALL_W = 40;
+  const entryBudget = W * 0.8;
+  return /* @__PURE__ */ React.createElement("div", { style: { position: "absolute", left: "50%", top: "50%", transform: "translate(-50%,-50%)" } }, trickPile.map((entry, i) => {
+    const neededWidth = entry.cards.length * (SMALL_W + 2);
+    const scale = Math.min(1, entryBudget / neededWidth);
+    return /* @__PURE__ */ React.createElement("div", { key: i, style: {
+      position: "absolute",
+      left: i * stepX - maxX / 2,
+      top: maxY / 2 - i * stepY,
+      transform: `translate(-50%,-50%) scale(${scale})`,
+      transformOrigin: "center center",
+      zIndex: i,
+      display: "flex",
+      gap: 2,
+      filter: i < n - 1 ? "brightness(0.8)" : "none"
+    } }, entry.cards.map((c) => /* @__PURE__ */ React.createElement(PlayingCard, { key: cardKey(c), card: c, small: true })));
+  }));
 }
 function Table({ mySeat, players, handCounts, turn, trickPile, finished, passedThisTrick, cumulative, turnStartedAt, turnSeconds }) {
+  const feltRef = useRef(null);
+  const [feltWidth, setFeltWidth] = useState(160);
+  useEffect(() => {
+    function measure() {
+      if (feltRef.current) setFeltWidth(feltRef.current.offsetWidth || 160);
+    }
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, []);
   const others = [1, 2, 3].map((o) => (mySeat + o) % 4);
   function posKey(seat) {
     const off = (seat - mySeat + 4) % 4;
@@ -192,10 +211,10 @@ function Table({ mySeat, players, handCounts, turn, trickPile, finished, passedT
       boxShadow: `0 0 12px ${color}99`
     } }, inner);
   }
-  return /* @__PURE__ */ React.createElement("div", { style: { width: "100%", marginBottom: 12 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "center", marginBottom: 10 } }, /* @__PURE__ */ React.createElement(Seat, { seat: bySeat.top })), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 12 } }, /* @__PURE__ */ React.createElement(Seat, { seat: bySeat.left }), /* @__PURE__ */ React.createElement("div", { style: {
+  return /* @__PURE__ */ React.createElement("div", { style: { width: "100%", marginBottom: 12 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "center", marginBottom: 10 } }, /* @__PURE__ */ React.createElement(Seat, { seat: bySeat.top })), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 12 } }, /* @__PURE__ */ React.createElement(Seat, { seat: bySeat.left }), /* @__PURE__ */ React.createElement("div", { ref: feltRef, style: {
     position: "relative",
     flex: 1,
-    minHeight: 170,
+    minHeight: 190,
     borderRadius: "50%",
     background: "radial-gradient(ellipse at center, #2e9b5f 0%, #1c7a45 60%, #0f4d2c 100%)",
     border: "9px solid #2b2b2e",
@@ -204,7 +223,7 @@ function Table({ mySeat, players, handCounts, turn, trickPile, finished, passedT
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden"
-  } }, /* @__PURE__ */ React.createElement(TrickPile, { trickPile })), /* @__PURE__ */ React.createElement(Seat, { seat: bySeat.right })));
+  } }, /* @__PURE__ */ React.createElement(TrickPile, { trickPile, feltWidth })), /* @__PURE__ */ React.createElement(Seat, { seat: bySeat.right })));
 }
 const styles = {
   bg: { minHeight: "100vh", width: "100%", background: "radial-gradient(ellipse at center, #1e4a7a 0%, #0d2848 70%, #061428 100%)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 },
