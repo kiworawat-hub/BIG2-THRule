@@ -150,8 +150,96 @@ const styles = {
   modalOverlay: { position: "fixed", inset: 0, background: "rgba(0,0,0,.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1e3, padding: 16 },
   modalCard: { background: "#0f1f3a", border: "1px solid #2f5f8f", borderRadius: 16, padding: "22px 18px", width: "100%", maxWidth: 380, maxHeight: "80vh", overflowY: "auto", boxShadow: "0 8px 32px rgba(0,0,0,.5)" }
 };
+function ChatWidget({ chat, chatOpen, setChatOpen, chatInput, setChatInput, sendChat, unread, mySeat }) {
+  const listRef = useRef(null);
+  useEffect(() => {
+    if (chatOpen && listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight;
+  }, [chat, chatOpen]);
+  return /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(
+    "button",
+    {
+      onClick: () => setChatOpen(!chatOpen),
+      style: {
+        position: "fixed",
+        right: 16,
+        bottom: 16,
+        zIndex: 1100,
+        width: 52,
+        height: 52,
+        borderRadius: "50%",
+        border: "1px solid #d4af37",
+        background: "linear-gradient(180deg,#1e4a7a,#0d2848)",
+        color: "#d4af37",
+        fontSize: 22,
+        boxShadow: "0 4px 14px rgba(0,0,0,.5)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center"
+      }
+    },
+    "\u{1F4AC}",
+    unread > 0 && !chatOpen && /* @__PURE__ */ React.createElement("span", { style: {
+      position: "absolute",
+      top: -2,
+      right: -2,
+      background: "#e63946",
+      color: "#fff",
+      fontSize: 10,
+      fontWeight: 800,
+      borderRadius: "50%",
+      minWidth: 18,
+      height: 18,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      padding: "0 4px"
+    } }, unread > 9 ? "9+" : unread)
+  ), chatOpen && /* @__PURE__ */ React.createElement("div", { style: {
+    position: "fixed",
+    right: 16,
+    bottom: 76,
+    zIndex: 1100,
+    width: 280,
+    maxWidth: "calc(100vw - 32px)",
+    height: 360,
+    maxHeight: "60vh",
+    background: "#0f1f3a",
+    border: "1px solid #2f5f8f",
+    borderRadius: 14,
+    boxShadow: "0 8px 32px rgba(0,0,0,.5)",
+    display: "flex",
+    flexDirection: "column",
+    overflow: "hidden"
+  } }, /* @__PURE__ */ React.createElement("div", { style: { padding: "10px 12px", borderBottom: "1px solid #2f5f8f", color: "#d4af37", fontWeight: 700, fontSize: 13 } }, "\u0E41\u0E0A\u0E17"), /* @__PURE__ */ React.createElement("div", { ref: listRef, style: { flex: 1, overflowY: "auto", padding: "8px 10px" } }, chat.length === 0 && /* @__PURE__ */ React.createElement("div", { style: { color: "#5a7a9f", fontSize: 12, textAlign: "center", marginTop: 20 } }, "\u0E22\u0E31\u0E07\u0E44\u0E21\u0E48\u0E21\u0E35\u0E02\u0E49\u0E2D\u0E04\u0E27\u0E32\u0E21"), chat.map((m, i) => {
+    const mine = m.seat === mySeat;
+    return /* @__PURE__ */ React.createElement("div", { key: i, style: { marginBottom: 8, textAlign: mine ? "right" : "left" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: SEAT_COLORS[m.seat] || "#8a9a8e", fontWeight: 700, marginBottom: 2 } }, m.name), /* @__PURE__ */ React.createElement("span", { style: {
+      display: "inline-block",
+      maxWidth: "85%",
+      padding: "6px 10px",
+      borderRadius: 12,
+      fontSize: 13,
+      background: mine ? "#d4af37" : "rgba(255,255,255,.08)",
+      color: mine ? "#1a1a1a" : "#f4e9d8",
+      wordBreak: "break-word",
+      textAlign: "left"
+    } }, m.text));
+  })), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6, padding: 8, borderTop: "1px solid #2f5f8f" } }, /* @__PURE__ */ React.createElement(
+    "input",
+    {
+      value: chatInput,
+      onChange: (e) => setChatInput(e.target.value),
+      onKeyDown: (e) => {
+        if (e.key === "Enter") sendChat();
+      },
+      placeholder: "\u0E1E\u0E34\u0E21\u0E1E\u0E4C\u0E02\u0E49\u0E2D\u0E04\u0E27\u0E32\u0E21...",
+      maxLength: 200,
+      style: { flex: 1, padding: "8px 10px", borderRadius: 8, border: "1px solid #3a5a7f", background: "#132747", color: "#f4e9d8", fontSize: 13 }
+    }
+  ), /* @__PURE__ */ React.createElement("button", { onClick: sendChat, style: { padding: "8px 14px", borderRadius: 8, border: "none", background: "#d4af37", color: "#1a1a1a", fontWeight: 700, fontSize: 13 } }, "\u0E2A\u0E48\u0E07"))));
+}
 function App() {
   const socketRef = useRef(null);
+  const chatOpenRef = useRef(false);
   const [connected, setConnected] = useState(false);
   const [name, setName] = useState("");
   const [roomCode, setRoomCode] = useState("");
@@ -160,6 +248,15 @@ function App() {
   const [selected, setSelected] = useState([]);
   const [error, setError] = useState("");
   const [, tick] = useState(0);
+  const [chat, setChat] = useState([]);
+  const [chatOpen, setChatOpenState] = useState(false);
+  const [chatInput, setChatInput] = useState("");
+  const [unread, setUnread] = useState(0);
+  function setChatOpen(v) {
+    chatOpenRef.current = v;
+    setChatOpenState(v);
+    if (v) setUnread(0);
+  }
   useEffect(() => {
     const socket = io();
     socketRef.current = socket;
@@ -169,6 +266,11 @@ function App() {
       setScreen("room");
     });
     socket.on("actionError", (msg) => setError(msg));
+    socket.on("chatHistory", (msgs) => setChat(msgs));
+    socket.on("chatMessage", (msg) => {
+      setChat((prev) => [...prev, msg]);
+      if (!chatOpenRef.current) setUnread((u) => u + 1);
+    });
     return () => socket.disconnect();
   }, []);
   useEffect(() => {
@@ -210,6 +312,11 @@ function App() {
   function nextRound() {
     socketRef.current.emit("nextRound", { code: state.code });
   }
+  function sendChat() {
+    if (!chatInput.trim() || !state) return;
+    socketRef.current.emit("chatMessage", { code: state.code, text: chatInput });
+    setChatInput("");
+  }
   function toggleSelect(c) {
     const k = cardKey(c);
     setSelected((prev) => prev.some((s) => cardKey(s) === k) ? prev.filter((s) => cardKey(s) !== k) : [...prev, c]);
@@ -219,12 +326,12 @@ function App() {
   }
   if (!state) return /* @__PURE__ */ React.createElement("div", { style: styles.bg }, /* @__PURE__ */ React.createElement("div", { style: styles.card }, /* @__PURE__ */ React.createElement("p", { style: { color: "#fff" } }, "\u0E01\u0E33\u0E25\u0E31\u0E07\u0E42\u0E2B\u0E25\u0E14...")));
   if (state.phase === "waiting") {
-    return /* @__PURE__ */ React.createElement("div", { style: styles.bg }, /* @__PURE__ */ React.createElement("div", { style: styles.card }, /* @__PURE__ */ React.createElement("h2", { style: { color: "#f4e9d8", textAlign: "center" } }, "\u0E2B\u0E49\u0E2D\u0E07 ", state.code), /* @__PURE__ */ React.createElement("p", { style: { color: "#d4af37", fontSize: 13, textAlign: "center", marginBottom: 16 } }, '\u0E2A\u0E48\u0E07\u0E23\u0E2B\u0E31\u0E2A\u0E19\u0E35\u0E49\u0E43\u0E2B\u0E49\u0E40\u0E1E\u0E37\u0E48\u0E2D\u0E19 \u0E41\u0E25\u0E49\u0E27\u0E01\u0E14 "\u0E40\u0E02\u0E49\u0E32\u0E23\u0E48\u0E27\u0E21\u0E2B\u0E49\u0E2D\u0E07"'), [0, 1, 2, 3].map((i) => /* @__PURE__ */ React.createElement("div", { key: i, style: { display: "flex", justifyContent: "space-between", padding: "8px 12px", background: "rgba(255,255,255,.05)", borderRadius: 6, marginBottom: 6 } }, /* @__PURE__ */ React.createElement("span", { style: { color: "#f4e9d8" } }, "\u0E17\u0E35\u0E48\u0E19\u0E31\u0E48\u0E07 ", i + 1), /* @__PURE__ */ React.createElement("span", { style: { color: state.players[i] ? "#d4af37" : "#8a9a8e" } }, state.players[i] || (i === state.mySeat ? "\u0E04\u0E38\u0E13" : "\u0E27\u0E48\u0E32\u0E07 (\u0E1A\u0E2D\u0E17)")))), state.mySeat === 0 ? /* @__PURE__ */ React.createElement("button", { style: __spreadProps(__spreadValues({}, styles.goldBtn), { marginTop: 14 }), onClick: startGame }, "\u0E40\u0E23\u0E34\u0E48\u0E21\u0E40\u0E01\u0E21") : /* @__PURE__ */ React.createElement("p", { style: { color: "#8a9a8e", textAlign: "center", marginTop: 14 } }, "\u0E23\u0E2D\u0E40\u0E08\u0E49\u0E32\u0E02\u0E2D\u0E07\u0E2B\u0E49\u0E2D\u0E07\u0E40\u0E23\u0E34\u0E48\u0E21\u0E40\u0E01\u0E21...")));
+    return /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { style: styles.bg }, /* @__PURE__ */ React.createElement("div", { style: styles.card }, /* @__PURE__ */ React.createElement("h2", { style: { color: "#f4e9d8", textAlign: "center" } }, "\u0E2B\u0E49\u0E2D\u0E07 ", state.code), /* @__PURE__ */ React.createElement("p", { style: { color: "#d4af37", fontSize: 13, textAlign: "center", marginBottom: 16 } }, '\u0E2A\u0E48\u0E07\u0E23\u0E2B\u0E31\u0E2A\u0E19\u0E35\u0E49\u0E43\u0E2B\u0E49\u0E40\u0E1E\u0E37\u0E48\u0E2D\u0E19 \u0E41\u0E25\u0E49\u0E27\u0E01\u0E14 "\u0E40\u0E02\u0E49\u0E32\u0E23\u0E48\u0E27\u0E21\u0E2B\u0E49\u0E2D\u0E07"'), [0, 1, 2, 3].map((i) => /* @__PURE__ */ React.createElement("div", { key: i, style: { display: "flex", justifyContent: "space-between", padding: "8px 12px", background: "rgba(255,255,255,.05)", borderRadius: 6, marginBottom: 6 } }, /* @__PURE__ */ React.createElement("span", { style: { color: "#f4e9d8" } }, "\u0E17\u0E35\u0E48\u0E19\u0E31\u0E48\u0E07 ", i + 1), /* @__PURE__ */ React.createElement("span", { style: { color: state.players[i] ? "#d4af37" : "#8a9a8e" } }, state.players[i] || (i === state.mySeat ? "\u0E04\u0E38\u0E13" : "\u0E27\u0E48\u0E32\u0E07 (\u0E1A\u0E2D\u0E17)")))), state.mySeat === 0 ? /* @__PURE__ */ React.createElement("button", { style: __spreadProps(__spreadValues({}, styles.goldBtn), { marginTop: 14 }), onClick: startGame }, "\u0E40\u0E23\u0E34\u0E48\u0E21\u0E40\u0E01\u0E21") : /* @__PURE__ */ React.createElement("p", { style: { color: "#8a9a8e", textAlign: "center", marginTop: 14 } }, "\u0E23\u0E2D\u0E40\u0E08\u0E49\u0E32\u0E02\u0E2D\u0E07\u0E2B\u0E49\u0E2D\u0E07\u0E40\u0E23\u0E34\u0E48\u0E21\u0E40\u0E01\u0E21..."))), /* @__PURE__ */ React.createElement(ChatWidget, { chat, chatOpen, setChatOpen, chatInput, setChatInput, sendChat, unread, mySeat: state.mySeat }));
   }
   const myHand = state.myHand || [];
   const isMyTurn = state.turn === state.mySeat && state.phase === "playing";
   const secsLeft = state.turnStartedAt ? Math.max(0, Math.ceil(state.turnSeconds - (Date.now() - state.turnStartedAt) / 1e3)) : null;
-  return /* @__PURE__ */ React.createElement("div", { style: styles.bg }, /* @__PURE__ */ React.createElement("div", { style: styles.wrap }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", marginBottom: 8 } }, /* @__PURE__ */ React.createElement("span", { style: { color: "#d4af37", fontWeight: 700 } }, "\u0E2B\u0E49\u0E2D\u0E07 ", state.code, " \xB7 \u0E23\u0E2D\u0E1A\u0E17\u0E35\u0E48 ", state.round)), /* @__PURE__ */ React.createElement(
+  return /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { style: styles.bg }, /* @__PURE__ */ React.createElement("div", { style: styles.wrap }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", marginBottom: 8 } }, /* @__PURE__ */ React.createElement("span", { style: { color: "#d4af37", fontWeight: 700 } }, "\u0E2B\u0E49\u0E2D\u0E07 ", state.code, " \xB7 \u0E23\u0E2D\u0E1A\u0E17\u0E35\u0E48 ", state.round)), /* @__PURE__ */ React.createElement(
     Table,
     {
       mySeat: state.mySeat,
@@ -251,6 +358,6 @@ function App() {
     const hand = state.allHands ? state.allHands[s] : [];
     const pts = handPoints(hand);
     return /* @__PURE__ */ React.createElement("div", { key: s, style: { marginBottom: 10 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#f4e9d8", fontWeight: 600, marginBottom: 4, textAlign: "center" } }, s === state.mySeat ? "\u0E04\u0E38\u0E13" : state.players[s] || `\u0E1A\u0E2D\u0E17 ${s + 1}`, s === state.finished[0] ? " \u2014 \u0E0A\u0E19\u0E30 \u{1F3C6}" : ` \u2014 \u0E40\u0E2B\u0E25\u0E37\u0E2D ${pts} point`, " ", /* @__PURE__ */ React.createElement("span", { style: { color: delta >= 0 ? "#6fbf8a" : "#e08a8a", fontWeight: 700 } }, "(", delta >= 0 ? "+" : "", delta, ")")), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 3, flexWrap: "wrap", justifyContent: "center" } }, hand.length === 0 ? /* @__PURE__ */ React.createElement("span", { style: { color: "#6fbf8a", fontSize: 12 } }, "\u0E2B\u0E21\u0E14\u0E44\u0E1E\u0E48") : hand.map((c) => /* @__PURE__ */ React.createElement(PlayingCard, { key: cardKey(c), card: c, small: true }))));
-  })), state.mySeat === state.finished[0] || state.players[state.finished[0]] === null && state.mySeat === 0 ? /* @__PURE__ */ React.createElement("button", { style: __spreadProps(__spreadValues({}, styles.goldBtn), { marginTop: 14 }), onClick: nextRound }, "\u0E40\u0E23\u0E34\u0E48\u0E21\u0E23\u0E2D\u0E1A\u0E15\u0E48\u0E2D\u0E44\u0E1B") : /* @__PURE__ */ React.createElement("p", { style: { color: "#8a9a8e", fontSize: 12, marginTop: 10, textAlign: "center" } }, "\u0E23\u0E2D\u0E1C\u0E39\u0E49\u0E0A\u0E19\u0E30\u0E01\u0E14\u0E40\u0E23\u0E34\u0E48\u0E21\u0E23\u0E2D\u0E1A\u0E15\u0E48\u0E2D\u0E44\u0E1B...")))));
+  })), state.mySeat === state.finished[0] || state.players[state.finished[0]] === null && state.mySeat === 0 ? /* @__PURE__ */ React.createElement("button", { style: __spreadProps(__spreadValues({}, styles.goldBtn), { marginTop: 14 }), onClick: nextRound }, "\u0E40\u0E23\u0E34\u0E48\u0E21\u0E23\u0E2D\u0E1A\u0E15\u0E48\u0E2D\u0E44\u0E1B") : /* @__PURE__ */ React.createElement("p", { style: { color: "#8a9a8e", fontSize: 12, marginTop: 10, textAlign: "center" } }, "\u0E23\u0E2D\u0E1C\u0E39\u0E49\u0E0A\u0E19\u0E30\u0E01\u0E14\u0E40\u0E23\u0E34\u0E48\u0E21\u0E23\u0E2D\u0E1A\u0E15\u0E48\u0E2D\u0E44\u0E1B..."))))), /* @__PURE__ */ React.createElement(ChatWidget, { chat, chatOpen, setChatOpen, chatInput, setChatInput, sendChat, unread, mySeat: state.mySeat }));
 }
 ReactDOM.createRoot(document.getElementById("root")).render(/* @__PURE__ */ React.createElement(App, null));
