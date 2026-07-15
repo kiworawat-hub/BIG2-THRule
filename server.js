@@ -323,6 +323,7 @@ io.on("connection", (socket) => {
     room.socketIds[seat] = socket.id;
     socket.join(room.code);
     cb({ ok: true, code: room.code, seat });
+    if (room.chat && room.chat.length) socket.emit("chatHistory", room.chat);
     broadcastState(room.code);
   });
 
@@ -359,6 +360,20 @@ io.on("connection", (socket) => {
     const winnerSeat = room.finished[0];
     startRound(room, winnerSeat);
     broadcastState(code);
+  });
+
+  socket.on("chatMessage", ({ code, text }) => {
+    const room = rooms.get(code);
+    if (!room) return;
+    const seat = seatOf(room, socket.id);
+    if (seat === -1) return;
+    const trimmed = (text || "").trim().slice(0, 200); // keep messages short
+    if (!trimmed) return;
+    const msg = { seat, name: room.players[seat] || `บอท ${seat + 1}`, text: trimmed, at: Date.now() };
+    room.chat = room.chat || [];
+    room.chat.push(msg);
+    if (room.chat.length > 100) room.chat = room.chat.slice(-100); // keep it bounded
+    io.to(code).emit("chatMessage", msg);
   });
 
   socket.on("disconnect", () => {
