@@ -612,7 +612,16 @@ function App() {
       turnStartedAt: state.turnStartedAt,
       turnSeconds: state.turnSeconds
     }
-  ), error && /* @__PURE__ */ React.createElement("div", { style: { color: "#e08a8a", fontSize: 12, textAlign: "center", marginBottom: 8 } }, error), state.phase === "playing" && /* @__PURE__ */ React.createElement(React.Fragment, null, isMyTurn && /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", color: "#1a1a1a", background: "#d4af37", borderRadius: 6, padding: "6px 10px", fontWeight: 700, marginBottom: 8 } }, "\u0E15\u0E32\u0E04\u0E38\u0E13! ", secsLeft !== null && `\u23F1 ${secsLeft}s`), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 8 } }, /* @__PURE__ */ React.createElement("div", { style: styles.statBox }, /* @__PURE__ */ React.createElement("span", { style: {
+  ), error && /* @__PURE__ */ React.createElement("div", { style: { color: "#e08a8a", fontSize: 12, textAlign: "center", marginBottom: 8 } }, error), state.phase === "playing" && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { style: {
+    textAlign: "center",
+    color: "#1a1a1a",
+    background: isMyTurn ? "#d4af37" : "transparent",
+    borderRadius: 6,
+    padding: "6px 10px",
+    fontWeight: 700,
+    marginBottom: 8,
+    visibility: isMyTurn ? "visible" : "hidden"
+  } }, "\u0E15\u0E32\u0E04\u0E38\u0E13! ", secsLeft !== null && `\u23F1 ${secsLeft}s`), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 8 } }, /* @__PURE__ */ React.createElement("div", { style: styles.statBox }, /* @__PURE__ */ React.createElement("span", { style: {
     display: "inline-block",
     width: 12,
     height: 12,
