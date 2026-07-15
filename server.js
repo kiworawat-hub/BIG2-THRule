@@ -84,9 +84,20 @@ function broadcastState(code) {
 }
 
 function cumulativeScores(room) {
-  const totals = [0, 0, 0, 0];
-  room.roundHistory.forEach(r => { r.net.forEach((v, i) => { totals[i] += v; }); });
-  return totals;
+  const totalsByName = {};
+  const botTotals = [0, 0, 0, 0]; // positional fallback — bots have no persistent identity across reseats
+  room.roundHistory.forEach(r => {
+    const namesAtRound = r.players || room.players;
+    r.net.forEach((v, i) => {
+      const name = namesAtRound[i];
+      if (name) totalsByName[name] = (totalsByName[name] || 0) + v;
+      else botTotals[i] += v;
+    });
+  });
+  return [0, 1, 2, 3].map(s => {
+    const name = room.players[s];
+    return name ? (totalsByName[name] || 0) : botTotals[s];
+  });
 }
 
 function sanitizeForSeat(room, seat) {
