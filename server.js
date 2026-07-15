@@ -9,8 +9,9 @@ const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
 const {
-  cardKey, dealFour, findStartPlayer, classifyCombo, comboBeats,
+  cardKey, cardValue, dealFour, findStartPlayer, classifyCombo, comboBeats,
   computePayouts, resolveNextTurn, getForcedHighCard,
+  drawSeatCards, seatDrawOrder, fillRemainingSeats, seatDrawTriggered,
 } = require("./gameLogic");
 
 const app = express();
@@ -20,6 +21,9 @@ const io = new Server(server, { cors: { origin: "*" } });
 
 const PORT = process.env.PORT || 3000;
 const TURN_SECONDS = 30;
+const ROUND_RESULT_DELAY_MS = 4000; // how long the round-result overlay stays up before auto-continuing
+const SEAT_DRAW_STEP_MS = 300; // how fast each seat-draw pick auto-resolves
+const SEAT_DRAW_MIN_DISPLAY_MS = 2000; // seat-draw screen always shows for at least this long
 
 // rooms: code -> room object (kept in memory; resets if the server restarts)
 const rooms = new Map();
@@ -35,7 +39,7 @@ function makeRoomCode() {
 
 function newRoomState(hostName, hostSocketId) {
   return {
-    phase: "waiting", // waiting | playing | finished
+    phase: "waiting", // waiting | seatdraw | playing | finished | gameover
     players: [hostName, null, null, null], // display names, null = open seat (bot fills it)
     socketIds: [hostSocketId, null, null, null],
     hands: [[], [], [], []],
@@ -51,8 +55,15 @@ function newRoomState(hostName, hostSocketId) {
     roundHistory: [],
     payout: null,
     log: [],
+    chat: [],
+    seatDraw: null,
+    lastMultiplierVictims: [],
+    matchRoundsRemaining: null, // null = play forever; a number = "last N rounds" mode
+    finalCumulative: null,
     botTimer: null,
     turnTimer: null,
+    roundEndTimer: null,
+    seatDrawTimer: null,
   };
 }
 
@@ -87,7 +98,7 @@ function sanitizeForSeat(room, seat) {
     myHand: room.hands[seat] || [],
     handCounts: room.hands.map(h => h.length),
     // reveal everyone's actual hands only once the round is over — never during active play
-    allHands: room.phase === "finished" ? room.hands : null,
+    allHands: (room.phase === "finished" || room.phase === "gameover") ? room.hands : null,
     turn: room.turn,
     turnStartedAt: room.turnStartedAt,
     turnSeconds: TURN_SECONDS,
@@ -100,18 +111,24 @@ function sanitizeForSeat(room, seat) {
     cumulative: cumulativeScores(room),
     payout: room.payout,
     everPlayed: room.everPlayed,
+    seatDraw: room.seatDraw,
+    matchRoundsRemaining: room.matchRoundsRemaining,
+    finalCumulative: room.finalCumulative,
   };
 }
 
 function clearTimers(room) {
   if (room.botTimer) { clearTimeout(room.botTimer); room.botTimer = null; }
   if (room.turnTimer) { clearTimeout(room.turnTimer); room.turnTimer = null; }
+  if (room.roundEndTimer) { clearTimeout(room.roundEndTimer); room.roundEndTimer = null; }
+  if (room.seatDrawTimer) { clearTimeout(room.seatDrawTimer); room.seatDrawTimer = null; }
 }
 
 function startRound(room, forcedLeaderSeat) {
   const hands = dealFour();
   const startSeat = (forcedLeaderSeat !== null && forcedLeaderSeat !== undefined) ? forcedLeaderSeat : findStartPlayer(hands);
   room.phase = "playing";
+  room.seatDraw = null;
   room.hands = hands;
   room.turn = startSeat;
   room.turnStartedAt = Date.now();
@@ -124,6 +141,101 @@ function startRound(room, forcedLeaderSeat) {
   room.payout = null;
   room.round += 1;
   scheduleTurn(room);
+}
+
+// Kicks off the fast, fully-automatic seat draw. pendingRound is the round
+// number that will actually be dealt once all 4 seats are resolved.
+function beginSeatDraw(room, pendingRound, winnerOldSeat) {
+  clearTimers(room);
+  const cards = drawSeatCards();
+  const order = seatDrawOrder(cards);
+  room.phase = "seatdraw";
+  room.seatDraw = {
+    cards, order, picks: {}, pendingRound,
+    playersAtDraw: [...room.players],
+    socketIdsAtDraw: [...room.socketIds],
+    winnerOldSeat: winnerOldSeat ?? null,
+    startedAt: Date.now(),
+  };
+  scheduleSeatDrawStep(room);
+}
+
+function scheduleSeatDrawStep(room) {
+  const sd = room.seatDraw;
+  if (!sd) return;
+  const step = Object.keys(sd.picks).length;
+  if (step >= 2) return; // steps 2/3 resolve synchronously inside applySeatPick
+  const pickerOldSeat = sd.order[step];
+  room.seatDrawTimer = setTimeout(() => {
+    let choice;
+    if (step === 0) {
+      choice = Math.floor(Math.random() * 4);
+    } else {
+      const seat1Pick = sd.picks[sd.order[0]];
+      const options = [(seat1Pick + 1) % 4, (seat1Pick + 3) % 4];
+      choice = options[Math.floor(Math.random() * 2)];
+    }
+    applySeatPick(room, pickerOldSeat, choice);
+  }, SEAT_DRAW_STEP_MS);
+}
+
+function applySeatPick(room, pickerOldSeat, newSeat) {
+  const sd = room.seatDraw;
+  if (!sd) return;
+  if (Object.values(sd.picks).includes(newSeat)) return; // shouldn't happen, safety
+  let picks = { ...sd.picks, [pickerOldSeat]: newSeat };
+
+  if (Object.keys(picks).length === 2) {
+    const [seat1, seat2] = sd.order;
+    const [remA, remB] = fillRemainingSeats(picks[seat1], picks[seat2]);
+    picks = { ...picks, [sd.order[2]]: remA, [sd.order[3]]: remB };
+  }
+
+  sd.picks = picks;
+
+  if (Object.keys(picks).length >= 4) {
+    const newPlayers = [null, null, null, null];
+    const newSocketIds = [null, null, null, null];
+    [0, 1, 2, 3].forEach(oldSeat => {
+      newPlayers[picks[oldSeat]] = sd.playersAtDraw[oldSeat];
+      newSocketIds[picks[oldSeat]] = sd.socketIdsAtDraw[oldSeat];
+    });
+    room.players = newPlayers;
+    room.socketIds = newSocketIds;
+    const forcedLeader = (sd.winnerOldSeat !== null && sd.winnerOldSeat !== undefined) ? picks[sd.winnerOldSeat] : null;
+    broadcastState(room.code); // show the completed layout briefly
+    const elapsed = Date.now() - sd.startedAt;
+    const remainingDelay = Math.max(0, SEAT_DRAW_MIN_DISPLAY_MS - elapsed);
+    room.seatDrawTimer = setTimeout(() => {
+      startRound(room, forcedLeader);
+      broadcastState(room.code);
+    }, remainingDelay);
+  } else {
+    broadcastState(room.code);
+    scheduleSeatDrawStep(room);
+  }
+}
+
+// Called once a round's result overlay has been showing for a bit — either
+// starts the next round (possibly via a reseat), or ends the match if the
+// "last N rounds" countdown has run out.
+function advanceAfterRound(room) {
+  if (room.phase !== "finished") return;
+  if (room.matchRoundsRemaining !== null && room.matchRoundsRemaining <= 0) {
+    room.phase = "gameover";
+    room.finalCumulative = cumulativeScores(room);
+    clearTimers(room);
+    broadcastState(room.code);
+    return;
+  }
+  const winnerOldSeat = room.finished[0];
+  const newRound = room.round + 1;
+  if (seatDrawTriggered(room.lastMultiplierVictims || [], winnerOldSeat)) {
+    beginSeatDraw(room, newRound, winnerOldSeat);
+  } else {
+    startRound(room, winnerOldSeat);
+  }
+  broadcastState(room.code);
 }
 
 function scheduleTurn(room) {
@@ -148,6 +260,7 @@ function applyPass(room, seat) {
   room.turn = resolved.nextTurn;
   room.turnStartedAt = Date.now();
   room.log.push(`${room.players[seat] || `บอท ${seat + 1}`} ผ่าน`);
+  scheduleTurn(room);
 }
 
 function applyPlay(room, seat, cards) {
@@ -171,7 +284,10 @@ function applyPlay(room, seat, cards) {
       round: room.round, net: room.payout.net, scores: room.payout.scores,
       cardsLeft: room.hands.map(h => h.length), players: [...room.players],
     });
+    room.lastMultiplierVictims = [0, 1, 2, 3].filter(s => room.hands[s].length >= 10);
+    if (room.matchRoundsRemaining !== null) room.matchRoundsRemaining -= 1;
     clearTimers(room);
+    room.roundEndTimer = setTimeout(() => advanceAfterRound(room), ROUND_RESULT_DELAY_MS);
     return;
   }
   const resolved = resolveNextTurn(room.finished, room.passedThisTrick, seat, seat);
@@ -277,7 +393,6 @@ function botAct(room) {
   else applyPlay(room, seat, move);
 
   broadcastState(room.code);
-  scheduleTurn(room);
 }
 
 function autoTimeout(room) {
@@ -286,7 +401,7 @@ function autoTimeout(room) {
   const hand = room.hands[seat];
   let move = null;
   if (room.lastPlayerSeat === null || room.lastPlayerSeat === seat) {
-    move = [[...hand].sort((a, b) => require("./gameLogic").cardValue(a) - require("./gameLogic").cardValue(b))[0]];
+    move = [[...hand].sort((a, b) => cardValue(a) - cardValue(b))[0]];
   } else {
     const forced = getForcedHighCard(
       { hands: room.hands, finished: room.finished, passedThisTrick: room.passedThisTrick, lastPlayerSeat: room.lastPlayerSeat, lastPlay: room.lastPlay },
@@ -297,7 +412,6 @@ function autoTimeout(room) {
   if (move) applyPlay(room, seat, move);
   else applyPass(room, seat);
   broadcastState(room.code);
-  scheduleTurn(room);
 }
 
 io.on("connection", (socket) => {
@@ -330,7 +444,15 @@ io.on("connection", (socket) => {
   socket.on("startGame", ({ code }) => {
     const room = rooms.get(code);
     if (!room || room.phase !== "waiting") return;
-    startRound(room, null);
+    beginSeatDraw(room, 1, null); // always draw seats before the very first round
+    broadcastState(code);
+  });
+
+  // "4 ตาสุดท้าย" — commits the room to ending after 4 more completed rounds
+  socket.on("startLastRounds", ({ code }) => {
+    const room = rooms.get(code);
+    if (!room) return;
+    room.matchRoundsRemaining = 4;
     broadcastState(code);
   });
 
@@ -340,7 +462,7 @@ io.on("connection", (socket) => {
     const seat = seatOf(room, socket.id);
     if (seat === -1) return;
     const result = validateAndPlay(room, seat, cards);
-    if (result.ok) { broadcastState(code); scheduleTurn(room); }
+    if (result.ok) broadcastState(code);
     else io.sockets.sockets.get(socket.id)?.emit("actionError", result.error);
   });
 
@@ -350,15 +472,20 @@ io.on("connection", (socket) => {
     const seat = seatOf(room, socket.id);
     if (seat === -1) return;
     const result = validateAndPass(room, seat);
-    if (result.ok) { broadcastState(code); scheduleTurn(room); }
+    if (result.ok) broadcastState(code);
     else io.sockets.sockets.get(socket.id)?.emit("actionError", result.error);
   });
 
-  socket.on("nextRound", ({ code }) => {
+  // Starts a fresh match in the same room (after "gameover"), same players/seats.
+  socket.on("restartMatch", ({ code }) => {
     const room = rooms.get(code);
-    if (!room || room.phase !== "finished") return;
-    const winnerSeat = room.finished[0];
-    startRound(room, winnerSeat);
+    if (!room || room.phase !== "gameover") return;
+    room.round = 0;
+    room.roundHistory = [];
+    room.matchRoundsRemaining = null;
+    room.finalCumulative = null;
+    room.lastMultiplierVictims = [];
+    room.phase = "waiting";
     broadcastState(code);
   });
 
