@@ -235,10 +235,64 @@ function seatDrawTriggered(multiplierVictims, leaderSeat) {
   return multiplierVictims.some(s => (s - leaderSeat + 4) % 4 === 3);
 }
 
+function find5CardCombos(hand) {
+  const combos = [];
+  const bySuit = {};
+  const byRank = {};
+  hand.forEach(c => {
+    (bySuit[c.suit] ||= []).push(c);
+    (byRank[c.rank] ||= []).push(c);
+  });
+
+  // straights (and straight flushes, when a same-suit run exists)
+  for (let start = 0; start <= RANKS.length - 5; start++) {
+    const neededRanks = RANKS.slice(start, start + 5);
+    if (neededRanks.every(r => byRank[r] && byRank[r].length > 0)) {
+      let sfCards = null;
+      for (const suit of SUITS) {
+        const cards = neededRanks.map(r => byRank[r].find(c => c.suit === suit));
+        if (cards.every(Boolean)) { sfCards = cards; break; }
+      }
+      if (sfCards) combos.push({ cards: sfCards, combo: classifyCombo(sfCards) });
+      const cards = neededRanks.map(r => byRank[r][0]);
+      combos.push({ cards, combo: classifyCombo(cards) });
+    }
+  }
+
+  // flushes — offer both the cheapest 5 and the strongest 5 of a suit
+  Object.values(bySuit).forEach(cards => {
+    if (cards.length >= 5) {
+      const sorted = [...cards].sort((a, b) => cardValue(a) - cardValue(b));
+      combos.push({ cards: sorted.slice(0, 5), combo: classifyCombo(sorted.slice(0, 5)) });
+      if (sorted.length > 5) combos.push({ cards: sorted.slice(-5), combo: classifyCombo(sorted.slice(-5)) });
+    }
+  });
+
+  // full house (triple + pair)
+  Object.entries(byRank).filter(([, cs]) => cs.length >= 3).forEach(([tr, tcs]) => {
+    Object.entries(byRank).filter(([r, cs]) => cs.length >= 2 && r !== tr).forEach(([, pcs]) => {
+      const cards = [...tcs.slice(0, 3), ...pcs.slice(0, 2)];
+      combos.push({ cards, combo: classifyCombo(cards) });
+    });
+  });
+
+  // four of a kind + kicker
+  Object.entries(byRank).filter(([, cs]) => cs.length === 4).forEach(([qr, qcs]) => {
+    hand.forEach(k => {
+      if (k.rank === qr) return;
+      const cards = [...qcs, k];
+      combos.push({ cards, combo: classifyCombo(cards) });
+    });
+  });
+
+  return combos.filter(c => c.combo);
+}
+
 module.exports = {
   SUITS, RANKS, SEAT_COLORS,
   cardKey, cardValue, makeDeck, shuffle, dealFour, findStartPlayer,
   classifyCombo, comboBeats, handPoints, playerScore, computePayouts,
   trickShouldReset, resolveNextTurn, findOneCardSeat, highestCard, getForcedHighCard,
   drawSeatCards, seatDrawOrder, fillRemainingSeats, seatDrawTriggered,
+  find5CardCombos,
 };
