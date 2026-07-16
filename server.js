@@ -397,7 +397,9 @@ function botChooseMove(room, seat, prevCards, prevCombo) {
 
   const others = [0, 1, 2, 3].filter(s => s !== seat && !room.finished.includes(s));
   const dangerSeats = others.filter(s => room.hands[s].length <= 2); // one or two cards from winning
+  const victimSeats = others.filter(s => room.hands[s].length >= 10); // in or heading into the multiplier zone
   const myCount = hand.length;
+  const myMultiplierZone = myCount >= 12 ? 3 : myCount >= 10 ? 2 : 1; // matches the actual scoring thresholds
 
   if (!prevCombo) {
     // LEADING — free choice of any combo type
@@ -413,7 +415,9 @@ function botChooseMove(room, seat, prevCards, prevCombo) {
         if (!someoneCanBeatIt) return opt.cards;
       }
     }
-    if (myCount <= 6) {
+    // loss minimization: escaping the 2x/3x multiplier zone is worth
+    // shedding cards aggressively for, same urgency as an actual endgame
+    if (myMultiplierZone > 1 || myCount <= 6) {
       // endgame — shed as many cards as possible per play to finish fast
       const multi = [...valid.filter(p => p.cards.length >= 2)]
         .sort((a, b) => b.cards.length - a.cards.length || a.combo.power[a.combo.power.length - 1] - b.combo.power[b.combo.power.length - 1]);
@@ -439,11 +443,28 @@ function botChooseMove(room, seat, prevCards, prevCombo) {
   const cheapest = valid[0];
   const usesPreciousCard = cheapest.cards.some(c => c.rank === "2" || c.rank === "A");
 
+  // 1) self-preservation first: if beating this trick helps escape the
+  //    multiplier zone, do it regardless of card cost — a 2 or Ace burned
+  //    now is worth far less than the penalty of staying stuck at x2/x3
+  if (myMultiplierZone > 1) return cheapest.cards;
+
+  // 2) strategic pass: the current leader is about to win, and some OTHER
+  //    opponent (not the leader, not me) is already stuck with a lot of
+  //    cards — better to let the leader finish the round right now and
+  //    lock in that opponent's bad position than to extend the trick and
+  //    give them more chances to unload cards before it ends
+  if (ownerDangerous && myCount > 3) {
+    const otherVictims = victimSeats.filter(s => s !== ownerSeat);
+    if (otherVictims.length > 0) return null;
+  }
+
+  // 3) conserve strength: no one is in immediate danger, it's still early,
+  //    and the only way to beat this trick burns a precious card — not
+  //    worth it, save it for later
   if (!ownerDangerous && dangerSeats.length === 0 && myCount > 7 && usesPreciousCard) {
-    // no one's close to winning yet and it's still early — hold onto the
-    // strong card rather than burning it on a low-stakes trick
     return null;
   }
+
   return cheapest.cards;
 }
 
