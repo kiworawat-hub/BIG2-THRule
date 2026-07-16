@@ -243,6 +243,61 @@ const styles = {
   modalOverlay: { position: "fixed", inset: 0, background: "rgba(0,0,0,.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1e3, padding: 16 },
   modalCard: { background: "#0f1f3a", border: "1px solid #2f5f8f", borderRadius: 16, padding: "22px 18px", width: "100%", maxWidth: 380, maxHeight: "80vh", overflowY: "auto", boxShadow: "0 8px 32px rgba(0,0,0,.5)" }
 };
+function SettingsModal({ settings, setSettings, voiceOn, voiceCount, voiceError, enableVoice, disableVoice, onClose }) {
+  const row = { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid rgba(255,255,255,.08)" };
+  const toggle = (on, onClick) => /* @__PURE__ */ React.createElement("span", { onClick, style: {
+    display: "inline-block",
+    width: 42,
+    height: 24,
+    borderRadius: 12,
+    cursor: "pointer",
+    position: "relative",
+    background: on ? "#4caf50" : "#3a4a5f",
+    transition: "background .15s"
+  } }, /* @__PURE__ */ React.createElement("span", { style: { position: "absolute", top: 2, left: on ? 20 : 2, width: 20, height: 20, borderRadius: "50%", background: "#fff", transition: "left .15s" } }));
+  return /* @__PURE__ */ React.createElement("div", { style: styles.modalOverlay, onClick: onClose }, /* @__PURE__ */ React.createElement("div", { style: styles.modalCard, onClick: (e) => e.stopPropagation() }, /* @__PURE__ */ React.createElement("h2", { style: { color: "#d4af37", textAlign: "center", marginBottom: 12 } }, "\u2699\uFE0F \u0E15\u0E31\u0E49\u0E07\u0E04\u0E48\u0E32"), /* @__PURE__ */ React.createElement("div", { style: row }, /* @__PURE__ */ React.createElement("span", { style: { color: "#f4e9d8", fontSize: 14 } }, "\u{1F50A} \u0E40\u0E2A\u0E35\u0E22\u0E07\u0E41\u0E08\u0E49\u0E07\u0E40\u0E15\u0E37\u0E2D\u0E19\u0E15\u0E32\u0E04\u0E38\u0E13"), toggle(settings.soundOn, () => setSettings({ soundOn: !settings.soundOn }))), settings.soundOn && /* @__PURE__ */ React.createElement("div", { style: { padding: "8px 0" } }, /* @__PURE__ */ React.createElement(
+    "input",
+    {
+      type: "range",
+      min: "0",
+      max: "1",
+      step: "0.05",
+      value: settings.soundVolume,
+      onChange: (e) => setSettings({ soundVolume: parseFloat(e.target.value) }),
+      style: { width: "100%" }
+    }
+  )), /* @__PURE__ */ React.createElement("div", { style: row }, /* @__PURE__ */ React.createElement("span", { style: { color: "#f4e9d8", fontSize: 14 } }, "\u{1F4F3} \u0E2A\u0E31\u0E48\u0E19\u0E41\u0E08\u0E49\u0E07\u0E40\u0E15\u0E37\u0E2D\u0E19"), toggle(settings.vibrateOn, () => setSettings({ vibrateOn: !settings.vibrateOn }))), settings.vibrateOn && /* @__PURE__ */ React.createElement("div", { style: { padding: "8px 0" } }, /* @__PURE__ */ React.createElement(
+    "input",
+    {
+      type: "range",
+      min: "0",
+      max: "1",
+      step: "0.05",
+      value: settings.vibrateLevel,
+      onChange: (e) => setSettings({ vibrateLevel: parseFloat(e.target.value) }),
+      style: { width: "100%" }
+    }
+  ), /* @__PURE__ */ React.createElement("p", { style: { color: "#5a7a9f", fontSize: 10, marginTop: 4 } }, "iPhone \u0E44\u0E21\u0E48\u0E23\u0E2D\u0E07\u0E23\u0E31\u0E1A\u0E01\u0E32\u0E23\u0E2A\u0E31\u0E48\u0E19\u0E1C\u0E48\u0E32\u0E19\u0E40\u0E27\u0E47\u0E1A (\u0E02\u0E49\u0E2D\u0E08\u0E33\u0E01\u0E31\u0E14\u0E02\u0E2D\u0E07 Safari)")), /* @__PURE__ */ React.createElement("div", { style: __spreadProps(__spreadValues({}, row), { borderBottom: "none" }) }, /* @__PURE__ */ React.createElement("span", { style: { color: "#f4e9d8", fontSize: 14 } }, "\u{1F3A4} \u0E44\u0E21\u0E42\u0E04\u0E23\u0E42\u0E1F\u0E19"), /* @__PURE__ */ React.createElement(
+    "span",
+    {
+      onClick: voiceOn ? disableVoice : enableVoice,
+      style: {
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 5,
+        padding: "4px 10px",
+        borderRadius: 20,
+        cursor: "pointer",
+        border: voiceOn ? "1px solid #4caf50" : "1px solid #8a9a8e",
+        background: voiceOn ? "rgba(76,175,80,.15)" : "rgba(255,255,255,.05)",
+        color: voiceOn ? "#4caf50" : "#c9d4cb",
+        fontSize: 11,
+        fontWeight: 700
+      }
+    },
+    voiceOn ? `\u0E40\u0E1B\u0E34\u0E14\u0E2D\u0E22\u0E39\u0E48 (${voiceCount})` : "\u0E40\u0E1B\u0E34\u0E14\u0E44\u0E21\u0E04\u0E4C"
+  )), voiceError && /* @__PURE__ */ React.createElement("div", { style: { color: "#e08a8a", fontSize: 11, marginBottom: 6 } }, voiceError), /* @__PURE__ */ React.createElement("button", { style: __spreadProps(__spreadValues({}, styles.goldBtn), { marginTop: 16 }), onClick: onClose }, "\u0E1B\u0E34\u0E14")));
+}
 function HistoryModal({ roundHistory, players, mySeat, cumulative, onClose }) {
   const [viewRound, setViewRound] = useState(null);
   function valueFor(row, colSeat) {
@@ -367,10 +422,26 @@ function App() {
   const [state, setState] = useState(null);
   const [selected, setSelected] = useState([]);
   const [error, setError] = useState("");
-  const [, tick] = useState(0);
+  const [tickCount, tick] = useState(0);
   const [chat, setChat] = useState([]);
   const [chatInput, setChatInput] = useState("");
   const [showHistory, setShowHistory] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [settings, setSettingsState] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem("big2settings") || "null");
+      return __spreadValues({ soundOn: true, soundVolume: 0.5, vibrateOn: true, vibrateLevel: 0.5 }, saved || {});
+    } catch (e) {
+      return { soundOn: true, soundVolume: 0.5, vibrateOn: true, vibrateLevel: 0.5 };
+    }
+  });
+  function setSettings(patch) {
+    setSettingsState((prev) => {
+      const next = __spreadValues(__spreadValues({}, prev), patch);
+      localStorage.setItem("big2settings", JSON.stringify(next));
+      return next;
+    });
+  }
   const [voiceOn, setVoiceOn] = useState(false);
   const [voiceCount, setVoiceCount] = useState(0);
   const [voiceError, setVoiceError] = useState("");
@@ -439,6 +510,25 @@ function App() {
     const iv = setInterval(() => tick((t) => t + 1), 250);
     return () => clearInterval(iv);
   }, [state == null ? void 0 : state.turn, state == null ? void 0 : state.phase]);
+  const prevMyTurnRef = useRef(false);
+  const warned10Ref = useRef(false);
+  useEffect(() => {
+    const myTurnNow = !!(state && state.phase === "playing" && state.turn === state.mySeat);
+    if (myTurnNow && !prevMyTurnRef.current) {
+      playTurnSound();
+      doVibrate(70);
+      warned10Ref.current = false;
+    }
+    prevMyTurnRef.current = myTurnNow;
+  }, [state == null ? void 0 : state.turn, state == null ? void 0 : state.phase, state == null ? void 0 : state.mySeat]);
+  useEffect(() => {
+    if (!state || state.phase !== "playing" || state.turn !== state.mySeat || !state.turnStartedAt) return;
+    const secs = Math.max(0, Math.ceil(state.turnSeconds - (Date.now() - state.turnStartedAt) / 1e3));
+    if (secs === 10 && !warned10Ref.current) {
+      warned10Ref.current = true;
+      doVibrate(50);
+    }
+  }, [tickCount]);
   function createRoom() {
     if (!name.trim()) {
       setError("\u0E43\u0E2A\u0E48\u0E0A\u0E37\u0E48\u0E2D\u0E01\u0E48\u0E2D\u0E19\u0E04\u0E23\u0E31\u0E1A");
@@ -485,6 +575,29 @@ function App() {
   }
   function restartMatch() {
     socketRef.current.emit("restartMatch", { code: state.code });
+  }
+  function playTurnSound() {
+    if (!settings.soundOn) return;
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = 880;
+      const peak = Math.max(0.01, settings.soundVolume * 0.18);
+      gain.gain.setValueAtTime(peak, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(1e-3, ctx.currentTime + 0.35);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.35);
+    } catch (e) {
+    }
+  }
+  function doVibrate(baseMs) {
+    if (!settings.vibrateOn || !navigator.vibrate) return;
+    const ms = Math.max(15, Math.round(baseMs * (0.4 + settings.vibrateLevel)));
+    navigator.vibrate(ms);
   }
   function leaveRoom() {
     localStorage.removeItem("big2session");
@@ -555,26 +668,31 @@ function App() {
   }
   if (!state) return /* @__PURE__ */ React.createElement("div", { style: styles.bg }, /* @__PURE__ */ React.createElement("div", { style: styles.card }, /* @__PURE__ */ React.createElement("p", { style: { color: "#fff" } }, "\u0E01\u0E33\u0E25\u0E31\u0E07\u0E42\u0E2B\u0E25\u0E14...")));
   if (state.phase === "waiting") {
-    return /* @__PURE__ */ React.createElement("div", { style: styles.bg }, /* @__PURE__ */ React.createElement("div", { style: styles.card }, /* @__PURE__ */ React.createElement("h2", { style: { color: "#f4e9d8", textAlign: "center" } }, "\u0E2B\u0E49\u0E2D\u0E07 ", state.code), /* @__PURE__ */ React.createElement("p", { style: { color: "#d4af37", fontSize: 13, textAlign: "center", marginBottom: 16 } }, '\u0E2A\u0E48\u0E07\u0E23\u0E2B\u0E31\u0E2A\u0E19\u0E35\u0E49\u0E43\u0E2B\u0E49\u0E40\u0E1E\u0E37\u0E48\u0E2D\u0E19 \u0E41\u0E25\u0E49\u0E27\u0E01\u0E14 "\u0E40\u0E02\u0E49\u0E32\u0E23\u0E48\u0E27\u0E21\u0E2B\u0E49\u0E2D\u0E07"'), [0, 1, 2, 3].map((i) => /* @__PURE__ */ React.createElement("div", { key: i, style: { display: "flex", justifyContent: "space-between", padding: "8px 12px", background: "rgba(255,255,255,.05)", borderRadius: 6, marginBottom: 6 } }, /* @__PURE__ */ React.createElement("span", { style: { color: "#f4e9d8" } }, "\u0E17\u0E35\u0E48\u0E19\u0E31\u0E48\u0E07 ", i + 1), /* @__PURE__ */ React.createElement("span", { style: { color: state.players[i] ? "#d4af37" : "#8a9a8e" } }, state.players[i] || (i === state.mySeat ? "\u0E04\u0E38\u0E13" : "\u0E27\u0E48\u0E32\u0E07 (\u0E1A\u0E2D\u0E17)")))), state.mySeat === 0 && (state.matchRoundsRemaining !== null ? /* @__PURE__ */ React.createElement("p", { style: { color: "#d4af37", textAlign: "center", fontSize: 12, marginTop: 10 } }, "\u0E42\u0E2B\u0E21\u0E14\u0E41\u0E21\u0E15\u0E0A\u0E4C: \u0E08\u0E1A\u0E43\u0E19 ", state.matchRoundsRemaining, " \u0E15\u0E32") : /* @__PURE__ */ React.createElement("button", { style: __spreadProps(__spreadValues({}, styles.greenBtn), { marginTop: 10 }), onClick: startLastRounds }, '\u0E40\u0E25\u0E48\u0E19\u0E41\u0E1A\u0E1A "4 \u0E15\u0E32\u0E2A\u0E38\u0E14\u0E17\u0E49\u0E32\u0E22"')), state.mySeat === 0 ? /* @__PURE__ */ React.createElement("button", { style: __spreadProps(__spreadValues({}, styles.goldBtn), { marginTop: 10 }), onClick: startGame }, "\u0E40\u0E23\u0E34\u0E48\u0E21\u0E40\u0E01\u0E21") : /* @__PURE__ */ React.createElement("p", { style: { color: "#8a9a8e", textAlign: "center", marginTop: 14 } }, "\u0E23\u0E2D\u0E40\u0E08\u0E49\u0E32\u0E02\u0E2D\u0E07\u0E2B\u0E49\u0E2D\u0E07\u0E40\u0E23\u0E34\u0E48\u0E21\u0E40\u0E01\u0E21..."), /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", marginTop: 10 } }, /* @__PURE__ */ React.createElement(
-      "span",
+    return /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { style: styles.bg }, /* @__PURE__ */ React.createElement("div", { style: styles.card }, /* @__PURE__ */ React.createElement("h2", { style: { color: "#f4e9d8", textAlign: "center" } }, "\u0E2B\u0E49\u0E2D\u0E07 ", state.code), /* @__PURE__ */ React.createElement("p", { style: { color: "#d4af37", fontSize: 13, textAlign: "center", marginBottom: 16 } }, '\u0E2A\u0E48\u0E07\u0E23\u0E2B\u0E31\u0E2A\u0E19\u0E35\u0E49\u0E43\u0E2B\u0E49\u0E40\u0E1E\u0E37\u0E48\u0E2D\u0E19 \u0E41\u0E25\u0E49\u0E27\u0E01\u0E14 "\u0E40\u0E02\u0E49\u0E32\u0E23\u0E48\u0E27\u0E21\u0E2B\u0E49\u0E2D\u0E07"'), [0, 1, 2, 3].map((i) => /* @__PURE__ */ React.createElement("div", { key: i, style: { display: "flex", justifyContent: "space-between", padding: "8px 12px", background: "rgba(255,255,255,.05)", borderRadius: 6, marginBottom: 6 } }, /* @__PURE__ */ React.createElement("span", { style: { color: "#f4e9d8" } }, "\u0E17\u0E35\u0E48\u0E19\u0E31\u0E48\u0E07 ", i + 1), /* @__PURE__ */ React.createElement("span", { style: { color: state.players[i] ? "#d4af37" : "#8a9a8e" } }, state.players[i] || (i === state.mySeat ? "\u0E04\u0E38\u0E13" : "\u0E27\u0E48\u0E32\u0E07 (\u0E1A\u0E2D\u0E17)")))), state.mySeat === 0 && (state.matchRoundsRemaining !== null ? /* @__PURE__ */ React.createElement("p", { style: { color: "#d4af37", textAlign: "center", fontSize: 12, marginTop: 10 } }, "\u0E42\u0E2B\u0E21\u0E14\u0E41\u0E21\u0E15\u0E0A\u0E4C: \u0E08\u0E1A\u0E43\u0E19 ", state.matchRoundsRemaining, " \u0E15\u0E32") : /* @__PURE__ */ React.createElement("button", { style: __spreadProps(__spreadValues({}, styles.greenBtn), { marginTop: 10 }), onClick: startLastRounds }, '\u0E40\u0E25\u0E48\u0E19\u0E41\u0E1A\u0E1A "4 \u0E15\u0E32\u0E2A\u0E38\u0E14\u0E17\u0E49\u0E32\u0E22"')), state.mySeat === 0 ? /* @__PURE__ */ React.createElement("button", { style: __spreadProps(__spreadValues({}, styles.goldBtn), { marginTop: 10 }), onClick: startGame }, "\u0E40\u0E23\u0E34\u0E48\u0E21\u0E40\u0E01\u0E21") : /* @__PURE__ */ React.createElement("p", { style: { color: "#8a9a8e", textAlign: "center", marginTop: 14 } }, "\u0E23\u0E2D\u0E40\u0E08\u0E49\u0E32\u0E02\u0E2D\u0E07\u0E2B\u0E49\u0E2D\u0E07\u0E40\u0E23\u0E34\u0E48\u0E21\u0E40\u0E01\u0E21..."), /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", marginTop: 10 } }, /* @__PURE__ */ React.createElement("span", { onClick: () => setShowSettings(true), style: {
+      display: "inline-flex",
+      alignItems: "center",
+      gap: 5,
+      padding: "4px 10px",
+      borderRadius: 20,
+      cursor: "pointer",
+      border: "1px solid #8a9a8e",
+      background: "rgba(255,255,255,.05)",
+      color: "#c9d4cb",
+      fontSize: 11,
+      fontWeight: 700
+    } }, "\u2699\uFE0F \u0E15\u0E31\u0E49\u0E07\u0E04\u0E48\u0E32", voiceOn && ` \xB7 \u{1F3A4} ${voiceCount}`)), /* @__PURE__ */ React.createElement(ChatPanel, { chat, chatInput, setChatInput, sendChat, mySeat: state.mySeat }), /* @__PURE__ */ React.createElement("p", { style: { textAlign: "center", marginTop: 10 } }, /* @__PURE__ */ React.createElement("span", { onClick: leaveRoom, style: { color: "#5a7a9f", fontSize: 11, textDecoration: "underline", cursor: "pointer" } }, "\u0E2D\u0E2D\u0E01\u0E08\u0E32\u0E01\u0E2B\u0E49\u0E2D\u0E07")))), showSettings && /* @__PURE__ */ React.createElement(
+      SettingsModal,
       {
-        onClick: voiceOn ? disableVoice : enableVoice,
-        style: {
-          display: "inline-flex",
-          alignItems: "center",
-          gap: 5,
-          padding: "4px 10px",
-          borderRadius: 20,
-          cursor: "pointer",
-          border: voiceOn ? "1px solid #4caf50" : "1px solid #8a9a8e",
-          background: voiceOn ? "rgba(76,175,80,.15)" : "rgba(255,255,255,.05)",
-          color: voiceOn ? "#4caf50" : "#c9d4cb",
-          fontSize: 11,
-          fontWeight: 700
-        }
-      },
-      voiceOn ? `\u{1F3A4} \u0E40\u0E1B\u0E34\u0E14\u0E2D\u0E22\u0E39\u0E48 (${voiceCount})` : "\u{1F3A4} \u0E40\u0E1B\u0E34\u0E14\u0E44\u0E21\u0E04\u0E4C"
-    )), voiceError && /* @__PURE__ */ React.createElement("div", { style: { color: "#e08a8a", fontSize: 11, textAlign: "center", marginTop: 6 } }, voiceError), /* @__PURE__ */ React.createElement(ChatPanel, { chat, chatInput, setChatInput, sendChat, mySeat: state.mySeat }), /* @__PURE__ */ React.createElement("p", { style: { textAlign: "center", marginTop: 10 } }, /* @__PURE__ */ React.createElement("span", { onClick: leaveRoom, style: { color: "#5a7a9f", fontSize: 11, textDecoration: "underline", cursor: "pointer" } }, "\u0E2D\u0E2D\u0E01\u0E08\u0E32\u0E01\u0E2B\u0E49\u0E2D\u0E07"))));
+        settings,
+        setSettings,
+        voiceOn,
+        voiceCount,
+        voiceError,
+        enableVoice,
+        disableVoice,
+        onClose: () => setShowSettings(false)
+      }
+    ));
   }
   if (state.phase === "seatdraw" && state.seatDraw) {
     const sd = state.seatDraw;
@@ -588,7 +706,7 @@ function App() {
   return /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { style: styles.bg }, /* @__PURE__ */ React.createElement("div", { style: styles.wrap }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 } }, /* @__PURE__ */ React.createElement("span", { style: { color: "#d4af37", fontWeight: 700 } }, "\u0E2B\u0E49\u0E2D\u0E07 ", state.code, " \xB7 \u0E23\u0E2D\u0E1A\u0E17\u0E35\u0E48 ", state.round), state.matchRoundsRemaining !== null ? /* @__PURE__ */ React.createElement("span", { style: styles.matchBadgeActive }, "\u{1F3C1} \u0E40\u0E2B\u0E25\u0E37\u0E2D\u0E2D\u0E35\u0E01 ", state.matchRoundsRemaining, " \u0E15\u0E32") : isLeadPlayer && /* @__PURE__ */ React.createElement("span", { onClick: startLastRounds, style: styles.matchBadge }, "\u{1F3C1} 4 \u0E15\u0E32\u0E2A\u0E38\u0E14\u0E17\u0E49\u0E32\u0E22")), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 } }, /* @__PURE__ */ React.createElement(
     "span",
     {
-      onClick: voiceOn ? disableVoice : enableVoice,
+      onClick: () => setShowSettings(true),
       style: {
         display: "inline-flex",
         alignItems: "center",
@@ -596,14 +714,15 @@ function App() {
         padding: "4px 10px",
         borderRadius: 20,
         cursor: "pointer",
-        border: voiceOn ? "1px solid #4caf50" : "1px solid #8a9a8e",
-        background: voiceOn ? "rgba(76,175,80,.15)" : "rgba(255,255,255,.05)",
-        color: voiceOn ? "#4caf50" : "#c9d4cb",
+        border: "1px solid #8a9a8e",
+        background: "rgba(255,255,255,.05)",
+        color: "#c9d4cb",
         fontSize: 11,
         fontWeight: 700
       }
     },
-    voiceOn ? `\u{1F3A4} \u0E40\u0E1B\u0E34\u0E14\u0E2D\u0E22\u0E39\u0E48 (${voiceCount})` : "\u{1F3A4} \u0E40\u0E1B\u0E34\u0E14\u0E44\u0E21\u0E04\u0E4C"
+    "\u2699\uFE0F \u0E15\u0E31\u0E49\u0E07\u0E04\u0E48\u0E32",
+    voiceOn && ` \xB7 \u{1F3A4} ${voiceCount}`
   ), /* @__PURE__ */ React.createElement("span", { onClick: leaveRoom, style: { color: "#5a7a9f", fontSize: 10, textDecoration: "underline", cursor: "pointer" } }, "\u0E2D\u0E2D\u0E01\u0E08\u0E32\u0E01\u0E2B\u0E49\u0E2D\u0E07")), voiceError && /* @__PURE__ */ React.createElement("div", { style: { color: "#e08a8a", fontSize: 11, textAlign: "center", marginBottom: 6 } }, voiceError), /* @__PURE__ */ React.createElement(
     Table,
     {
@@ -651,6 +770,18 @@ function App() {
       const score = finalScores[s] || 0;
       return /* @__PURE__ */ React.createElement("div", { key: s, style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 12px", marginBottom: 6, borderRadius: 10, background: i === 0 ? "rgba(212,175,55,.15)" : "rgba(255,255,255,.05)", border: i === 0 ? "1px solid #d4af37" : "1px solid transparent" } }, /* @__PURE__ */ React.createElement("span", { style: { color: "#f4e9d8", fontWeight: 600, fontSize: 14 } }, i === 0 && "\u{1F3C6} ", s === state.mySeat ? "\u0E04\u0E38\u0E13" : state.players[s] || `\u0E1A\u0E2D\u0E17 ${s + 1}`), /* @__PURE__ */ React.createElement("span", { style: { color: score >= 0 ? "#6fbf8a" : "#e08a8a", fontWeight: 900, fontSize: 16 } }, score >= 0 ? "+" : "", score));
     })), isLeadPlayer ? /* @__PURE__ */ React.createElement("button", { style: __spreadProps(__spreadValues({}, styles.goldBtn), { marginTop: 16 }), onClick: restartMatch }, "\u0E40\u0E25\u0E48\u0E19\u0E41\u0E21\u0E15\u0E0A\u0E4C\u0E43\u0E2B\u0E21\u0E48") : /* @__PURE__ */ React.createElement("p", { style: { color: "#8a9a8e", fontSize: 12, marginTop: 14, textAlign: "center" } }, "\u0E23\u0E2D\u0E40\u0E08\u0E49\u0E32\u0E02\u0E2D\u0E07\u0E2B\u0E49\u0E2D\u0E07\u0E40\u0E23\u0E34\u0E48\u0E21\u0E41\u0E21\u0E15\u0E0A\u0E4C\u0E43\u0E2B\u0E21\u0E48...")));
-  })())), showHistory && /* @__PURE__ */ React.createElement(HistoryModal, { roundHistory: state.roundHistory, players: state.players, mySeat: state.mySeat, cumulative: state.cumulative, onClose: () => setShowHistory(false) }));
+  })())), showHistory && /* @__PURE__ */ React.createElement(HistoryModal, { roundHistory: state.roundHistory, players: state.players, mySeat: state.mySeat, cumulative: state.cumulative, onClose: () => setShowHistory(false) }), showSettings && /* @__PURE__ */ React.createElement(
+    SettingsModal,
+    {
+      settings,
+      setSettings,
+      voiceOn,
+      voiceCount,
+      voiceError,
+      enableVoice,
+      disableVoice,
+      onClose: () => setShowSettings(false)
+    }
+  ));
 }
 ReactDOM.createRoot(document.getElementById("root")).render(/* @__PURE__ */ React.createElement(App, null));
