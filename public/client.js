@@ -34,8 +34,8 @@ function handPoints(hand) {
   return pts;
 }
 function PlayingCard({ card, selected, onClick, small, large, style }) {
-  const w = large ? 68 : small ? 40 : 58, h = large ? 100 : small ? 58 : 82;
-  const rankSize = large ? 20 : small ? 14 : 18, suitBig = large ? 30 : small ? 18 : 27;
+  const w = large ? 102 : small ? 40 : 58, h = large ? 150 : small ? 58 : 82;
+  const rankSize = large ? 30 : small ? 14 : 18, suitBig = large ? 45 : small ? 18 : 27;
   const color = SUIT_COLOR[card.suit];
   return /* @__PURE__ */ React.createElement("div", { onClick, style: __spreadValues({
     width: w,
@@ -77,7 +77,7 @@ function Hand({ cards, selected, onToggle }) {
       return [...kept, ...added];
     });
   }, [cardsSignature]);
-  const CARD_W = 68;
+  const CARD_W = 102;
   const orderedCards = order.map((k) => cards.find((c) => cardKey(c) === k)).filter(Boolean);
   const n = orderedCards.length;
   const gap = n > 1 ? Math.min(CARD_W * 0.66, Math.max(14, (w - CARD_W) / (n - 1))) : 0;
@@ -113,7 +113,7 @@ function Hand({ cards, selected, onToggle }) {
     setDragX(0);
     if (!wasDrag) onToggle(card);
   }
-  return /* @__PURE__ */ React.createElement("div", { ref, style: { position: "relative", height: 118, width: "100%" } }, /* @__PURE__ */ React.createElement("div", { style: { position: "relative", height: 118, width: totalW, margin: "0 auto" } }, orderedCards.map((c, i) => {
+  return /* @__PURE__ */ React.createElement("div", { ref, style: { position: "relative", height: 178, width: "100%" } }, /* @__PURE__ */ React.createElement("div", { style: { position: "relative", height: 178, width: totalW, margin: "0 auto" } }, orderedCards.map((c, i) => {
     const key = cardKey(c);
     const isDragging = key === dragKey;
     const isSel = selected.some((s) => cardKey(s) === key);
