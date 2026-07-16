@@ -12,6 +12,7 @@ const {
   cardKey, cardValue, dealFour, findStartPlayer, classifyCombo, comboBeats,
   computePayouts, resolveNextTurn, getForcedHighCard,
   drawSeatCards, seatDrawOrder, fillRemainingSeats, seatDrawTriggered,
+  find5CardCombos,
 } = require("./gameLogic");
 
 const app = express();
@@ -352,7 +353,19 @@ function validateAndPass(room, seat) {
 }
 
 // ---- simple bot AI ----
-function botChooseMove(hand, prevCards, prevCombo) {
+// ---- Strategic bot AI ----
+// The bot sees the full room state (it's server-authoritative anyway) and
+// uses that to play toward maximizing its own net chip outcome:
+//  - generates every legal combo, including 5-card hands (straights,
+//    flushes, full houses, quad+kicker, straight flushes)
+//  - when leading, tries to block any opponent close to winning by checking
+//    whether THEIR actual hand can beat the combo it's considering
+//  - prioritizes clearing multiple cards at once once it's close to winning
+//    itself, to finish fast
+//  - conserves precious cards (2s/Aces) on low-stakes tricks when no one is
+//    in immediate danger of winning, instead of always playing the cheapest
+//    valid beat
+function generateAllCombos(hand) {
   const tryPlays = [];
   hand.forEach(c => tryPlays.push({ cards: [c], combo: classifyCombo([c]) }));
   const byRank = {};
@@ -368,14 +381,70 @@ function botChooseMove(hand, prevCards, prevCombo) {
     if (group.length >= 3) tryPlays.push({ cards: group.slice(0, 3), combo: classifyCombo(group.slice(0, 3)) });
     if (group.length >= 4) tryPlays.push({ cards: group.slice(0, 4), combo: classifyCombo(group.slice(0, 4)) });
   });
-  const valid = tryPlays.filter(p => p.combo && comboBeats(p.combo, prevCombo, p.cards, prevCards || []));
+  find5CardCombos(hand).forEach(p => tryPlays.push(p));
+  return tryPlays;
+}
+
+function sortByCheapest(list) {
+  return [...list].sort((a, b) => a.cards.length - b.cards.length || a.combo.power[a.combo.power.length - 1] - b.combo.power[b.combo.power.length - 1]);
+}
+
+function botChooseMove(room, seat, prevCards, prevCombo) {
+  const hand = room.hands[seat];
+  const tryPlays = generateAllCombos(hand);
+  const valid = sortByCheapest(tryPlays.filter(p => p.combo && comboBeats(p.combo, prevCombo, p.cards, prevCards || [])));
   if (valid.length === 0) return null;
-  valid.sort((a, b) => a.cards.length - b.cards.length || a.combo.power[a.combo.power.length - 1] - b.combo.power[b.combo.power.length - 1]);
+
+  const others = [0, 1, 2, 3].filter(s => s !== seat && !room.finished.includes(s));
+  const dangerSeats = others.filter(s => room.hands[s].length <= 2); // one or two cards from winning
+  const myCount = hand.length;
+
   if (!prevCombo) {
+    // LEADING — free choice of any combo type
+    if (dangerSeats.length > 0) {
+      // try to find a lead that NONE of the dangerous opponents can beat,
+      // checking their actual hands (cheapest/smallest options first)
+      const blockCandidates = sortByCheapest(valid.filter(p => p.cards.length >= 2));
+      for (const opt of blockCandidates) {
+        const someoneCanBeatIt = dangerSeats.some(ds => {
+          const theirOptions = generateAllCombos(room.hands[ds]);
+          return theirOptions.some(o => o.combo && comboBeats(o.combo, opt.combo, o.cards, opt.cards));
+        });
+        if (!someoneCanBeatIt) return opt.cards;
+      }
+    }
+    if (myCount <= 6) {
+      // endgame — shed as many cards as possible per play to finish fast
+      const multi = [...valid.filter(p => p.cards.length >= 2)]
+        .sort((a, b) => b.cards.length - a.cards.length || a.combo.power[a.combo.power.length - 1] - b.combo.power[b.combo.power.length - 1]);
+      if (multi.length) return multi[0].cards;
+    }
+    // default: mostly lead cheap singles, sometimes shed a pair/triple/5-set for variety
     const singles = valid.filter(p => p.cards.length === 1);
-    return singles.length ? singles[0].cards : valid[0].cards;
+    const pairs = valid.filter(p => p.cards.length === 2);
+    const triples = valid.filter(p => p.cards.length === 3);
+    const fives = valid.filter(p => p.cards.length === 5);
+    const roll = Math.random();
+    if (roll < 0.55 || (pairs.length === 0 && fives.length === 0 && triples.length === 0)) return singles[0].cards;
+    if (roll < 0.8 && pairs.length) return pairs[0].cards;
+    if (roll < 0.93 && fives.length) return fives[0].cards;
+    if (triples.length) return triples[0].cards;
+    return singles[0].cards;
   }
-  return valid[0].cards;
+
+  // RESPONDING to an active trick
+  const ownerSeat = room.lastPlayerSeat;
+  const ownerCount = ownerSeat !== null && ownerSeat !== undefined ? room.hands[ownerSeat].length : 99;
+  const ownerDangerous = ownerCount <= 3;
+  const cheapest = valid[0];
+  const usesPreciousCard = cheapest.cards.some(c => c.rank === "2" || c.rank === "A");
+
+  if (!ownerDangerous && dangerSeats.length === 0 && myCount > 7 && usesPreciousCard) {
+    // no one's close to winning yet and it's still early — hold onto the
+    // strong card rather than burning it on a low-stakes trick
+    return null;
+  }
+  return cheapest.cards;
 }
 
 function botAct(room) {
@@ -385,7 +454,7 @@ function botAct(room) {
   const isNewTrick = room.lastPlayerSeat === null;
   const prevCards = isNewTrick ? null : room.lastPlay.cards;
   const prevCombo = prevCards ? classifyCombo(prevCards) : null;
-  let move = botChooseMove(hand, prevCards, prevCombo);
+  let move = botChooseMove(room, seat, prevCards, prevCombo);
 
   if (room.round === 1 && !room.everPlayed) {
     const has3c = hand.some(c => c.rank === "3" && c.suit === "♣");
