@@ -277,6 +277,8 @@ function applyPass(room, seat) {
   scheduleTurn(room);
 }
 
+const ROUND_END_REVEAL_MS = 1600; // let the winning card sit visible on the table before the summary pops up
+
 function applyPlay(room, seat, cards) {
   const hand = room.hands[seat];
   const selKeys = new Set(cards.map(cardKey));
@@ -290,25 +292,34 @@ function applyPlay(room, seat, cards) {
   room.log.push(`${label} ลงไพ่ ${cards.map(c => c.rank + c.suit).join(" ")}`);
 
   if (newHand.length === 0) {
-    room.finished = [seat];
-    room.phase = "finished";
+    // don't flip to "finished" immediately — this broadcast (triggered by
+    // the caller right after applyPlay returns) shows the winning card
+    // sitting on the table first; the summary appears after a short pause
     room.turn = null;
-    room.payout = computePayouts(room.hands);
-    room.roundHistory.push({
-      round: room.round, net: room.payout.net, scores: room.payout.scores,
-      cardsLeft: room.hands.map(h => h.length), players: [...room.players],
-      hands: room.hands.map(h => h.map(c => ({ rank: c.rank, suit: c.suit }))),
-    });
-    room.lastMultiplierVictims = [0, 1, 2, 3].filter(s => room.hands[s].length >= 10);
-    if (room.matchRoundsRemaining !== null) room.matchRoundsRemaining -= 1;
     clearTimers(room);
-    room.roundEndTimer = setTimeout(() => advanceAfterRound(room), ROUND_RESULT_DELAY_MS);
+    room.roundEndTimer = setTimeout(() => finishRound(room, seat), ROUND_END_REVEAL_MS);
     return;
   }
   const resolved = resolveNextTurn(room.finished, room.passedThisTrick, seat, seat);
   room.turn = resolved.nextTurn;
   room.turnStartedAt = Date.now();
   scheduleTurn(room);
+}
+
+function finishRound(room, seat) {
+  room.finished = [seat];
+  room.phase = "finished";
+  room.payout = computePayouts(room.hands);
+  room.roundHistory.push({
+    round: room.round, net: room.payout.net, scores: room.payout.scores,
+    cardsLeft: room.hands.map(h => h.length), players: [...room.players],
+    hands: room.hands.map(h => h.map(c => ({ rank: c.rank, suit: c.suit }))),
+  });
+  room.lastMultiplierVictims = [0, 1, 2, 3].filter(s => room.hands[s].length >= 10);
+  if (room.matchRoundsRemaining !== null) room.matchRoundsRemaining -= 1;
+  broadcastState(room.code);
+  clearTimers(room);
+  room.roundEndTimer = setTimeout(() => advanceAfterRound(room), ROUND_RESULT_DELAY_MS);
 }
 
 function validateAndPlay(room, seat, cards) {
