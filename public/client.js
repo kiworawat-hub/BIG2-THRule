@@ -196,7 +196,7 @@ function Table({ mySeat, players, handCounts, turn, trickPile, finished, passedT
       padding: "8px 12px",
       borderRadius: 12,
       minWidth: 64,
-      height: 64,
+      height: 76,
       boxSizing: "border-box",
       background: "linear-gradient(180deg, rgba(20,32,54,.92), rgba(14,24,44,.92))",
       border: `2px solid ${active ? "transparent" : color}`,
@@ -205,7 +205,7 @@ function Table({ mySeat, players, handCounts, turn, trickPile, finished, passedT
       flexDirection: "column",
       justifyContent: "center",
       gap: 2
-    } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#f4e9d8", fontWeight: 700, height: 14, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" } }, players[seat] || `\u0E1A\u0E2D\u0E17 ${seat + 1}`, finished.includes(seat) && " \u2705"), /* @__PURE__ */ React.createElement("div", { style: { height: 18, display: "flex", alignItems: "center", justifyContent: "center" } }, big2 ? /* @__PURE__ */ React.createElement("span", { style: { fontSize: 14, fontWeight: 900, color: "#ff5252" } }, "BIG2! \u{1F525}") : /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: active ? "#d4af37" : "#8a9a8e" } }, passed ? "\u0E1C\u0E48\u0E32\u0E19" : `${handCounts[seat]} \u0E43\u0E1A`)), /* @__PURE__ */ React.createElement("div", { style: { height: 14, display: "flex", alignItems: "center", justifyContent: "center" } }, cumulative && /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, fontWeight: 700, color: score >= 0 ? "#6fbf8a" : "#e08a8a" } }, score >= 0 ? "+" : "", score)));
+    } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, lineHeight: "18px", color: "#f4e9d8", fontWeight: 700, height: 20, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" } }, players[seat] || `\u0E1A\u0E2D\u0E17 ${seat + 1}`, finished.includes(seat) && " \u2705"), /* @__PURE__ */ React.createElement("div", { style: { height: 20, display: "flex", alignItems: "center", justifyContent: "center" } }, big2 ? /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13, fontWeight: 900, color: "#ff5252" } }, "BIG2") : /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: active ? "#d4af37" : "#8a9a8e" } }, passed ? "\u0E1C\u0E48\u0E32\u0E19" : `${handCounts[seat]} \u0E43\u0E1A`)), /* @__PURE__ */ React.createElement("div", { style: { height: 16, display: "flex", alignItems: "center", justifyContent: "center" } }, cumulative && /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, fontWeight: 700, color: score >= 0 ? "#6fbf8a" : "#e08a8a" } }, score >= 0 ? "+" : "", score)));
     let ringBg = "transparent", ringShadow = "none";
     if (active) {
       const elapsed = turnStartedAt ? Date.now() - turnStartedAt : 0;
