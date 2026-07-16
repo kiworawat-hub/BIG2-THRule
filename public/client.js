@@ -35,7 +35,7 @@ function handPoints(hand) {
 }
 function PlayingCard({ card, selected, onClick, small, large, style }) {
   const w = large ? 68 : small ? 40 : 58, h = large ? 100 : small ? 58 : 82;
-  const rankSize = large ? 30 : small ? 14 : 18, suitBig = large ? 45 : small ? 18 : 27;
+  const rankSize = large ? 20 : small ? 14 : 18, suitBig = large ? 45 : small ? 18 : 27;
   const color = SUIT_COLOR[card.suit];
   return /* @__PURE__ */ React.createElement("div", { onClick, style: __spreadValues({
     width: w,
@@ -46,12 +46,11 @@ function PlayingCard({ card, selected, onClick, small, large, style }) {
     boxShadow: selected ? "0 -8px 14px -4px rgba(212,175,55,.55), 0 3px 6px rgba(0,0,0,.35)" : "0 2px 5px rgba(0,0,0,.35)",
     display: "flex",
     flexDirection: "column",
-    justifyContent: "space-between",
     padding: small ? "3px 4px" : "5px 6px",
     userSelect: "none",
     flexShrink: 0,
     cursor: onClick ? "pointer" : "default"
-  }, style) }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: rankSize, fontWeight: 800, color, lineHeight: 1 } }, card.rank, /* @__PURE__ */ React.createElement("div", { style: { fontSize: rankSize * 0.8, fontWeight: 700 } }, card.suit)), /* @__PURE__ */ React.createElement("div", { style: { fontSize: suitBig, color, textAlign: "center", fontWeight: 700 } }, card.suit));
+  }, style) }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: rankSize, fontWeight: 800, color, lineHeight: 1 } }, card.rank, /* @__PURE__ */ React.createElement("div", { style: { fontSize: rankSize * 0.8, fontWeight: 700 } }, card.suit)), /* @__PURE__ */ React.createElement("div", { style: { flex: 1, display: "flex", alignItems: "center", justifyContent: "center" } }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: suitBig, color, fontWeight: 700 } }, card.suit)));
 }
 function Hand({ cards, selected, onToggle }) {
   const ref = useRef(null);
