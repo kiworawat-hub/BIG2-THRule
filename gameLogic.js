@@ -77,6 +77,14 @@ function classifyCombo(cards) {
     let isStraight = true;
     for (let i = 1; i < idxs.length; i++) if (idxs[i] !== idxs[i - 1] + 1) { isStraight = false; break; }
 
+    // special wrap-around straights (Thai house rule variant): A-2-3-4-5 and
+    // 2-3-4-5-6. Both rank ABOVE every normal straight (max normal straight
+    // is 10-J-Q-K-A); A2345 ranks above 23456; ties within the same shape
+    // are broken by the suit of the 2.
+    const rankSet = new Set(ranks);
+    const isWrapA2345 = rankSet.size === 5 && ["A", "2", "3", "4", "5"].every(r => rankSet.has(r));
+    const isWrap23456 = rankSet.size === 5 && ["2", "3", "4", "5", "6"].every(r => rankSet.has(r));
+
     if (countVals[0] === 4) {
       const quadRank = Object.keys(counts).find(r => counts[r] === 4);
       const quadCards = sorted.filter(c => c.rank === quadRank);
@@ -86,6 +94,12 @@ function classifyCombo(cards) {
     if (countVals[0] === 3 && countVals[1] === 2) {
       const tripRank = Object.keys(counts).find(r => counts[r] === 3);
       return { type: "fullhouse", power: [2, rankIdx(tripRank)] };
+    }
+    if (isWrapA2345 || isWrap23456) {
+      const twoCard = sorted.find(c => c.rank === "2");
+      const subRank = isWrapA2345 ? 13 : 12; // both above the max normal straight's idxs[4] of 11 (T-J-Q-K-A)
+      if (isFlush) return { type: "straightflush", power: [4, subRank, suitIdx(twoCard.suit)] };
+      return { type: "straight", power: [0, subRank, suitIdx(twoCard.suit)] };
     }
     if (isStraight && isFlush) return { type: "straightflush", power: [4, idxs[4], cardValue(sorted[4])] };
     if (isFlush) return { type: "flush", power: [1, cardValue(sorted[4])] };
@@ -258,6 +272,21 @@ function find5CardCombos(hand) {
       combos.push({ cards, combo: classifyCombo(cards) });
     }
   }
+
+  // wrap-around straights: A-2-3-4-5 and 2-3-4-5-6 (not reachable via the
+  // consecutive-window scan above, since RANKS puts 2 at the very end)
+  [["A", "2", "3", "4", "5"], ["2", "3", "4", "5", "6"]].forEach(neededRanks => {
+    if (neededRanks.every(r => byRank[r] && byRank[r].length > 0)) {
+      let sfCards = null;
+      for (const suit of SUITS) {
+        const cards = neededRanks.map(r => byRank[r].find(c => c.suit === suit));
+        if (cards.every(Boolean)) { sfCards = cards; break; }
+      }
+      if (sfCards) combos.push({ cards: sfCards, combo: classifyCombo(sfCards) });
+      const cards = neededRanks.map(r => byRank[r][0]);
+      combos.push({ cards, combo: classifyCombo(cards) });
+    }
+  });
 
   // flushes — offer both the cheapest 5 and the strongest 5 of a suit
   Object.values(bySuit).forEach(cards => {
