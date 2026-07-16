@@ -101,6 +101,12 @@ function classifyCombo(cards) {
       if (isFlush) return { type: "straightflush", power: [4, subRank, suitIdx(twoCard.suit)] };
       return { type: "straight", power: [0, subRank, suitIdx(twoCard.suit)] };
     }
+    // "2" is never part of a normal ascending run — it can only appear in a
+    // straight-type combo via the two special wrap patterns above (already
+    // handled). Anything else containing a 2 (e.g. J-Q-K-A-2, Q-K-A-2-3)
+    // is not a straight, even though its rank indices happen to be
+    // numerically consecutive under the internal ranking order.
+    if (ranks.includes("2")) isStraight = false;
     if (isStraight && isFlush) return { type: "straightflush", power: [4, idxs[4], cardValue(sorted[4])] };
     if (isFlush) return { type: "flush", power: [1, cardValue(sorted[4])] };
     if (isStraight) return { type: "straight", power: [0, idxs[4], cardValue(sorted[4])] };
