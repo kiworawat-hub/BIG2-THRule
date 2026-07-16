@@ -21,7 +21,8 @@ const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: "*" } });
 
 const PORT = process.env.PORT || 3000;
-const TURN_SECONDS = 30;
+const TURN_SECONDS = 30; // responding to an active trick
+const LEAD_TURN_SECONDS = 45; // leading a fresh trick — more to think through
 const ROUND_RESULT_DELAY_MS = 4000; // how long the round-result overlay stays up before auto-continuing
 const SEAT_DRAW_STEP_MS = 300; // how fast each seat-draw pick auto-resolves
 const SEAT_DRAW_MIN_DISPLAY_MS = 2000; // seat-draw screen always shows for at least this long
@@ -113,7 +114,7 @@ function sanitizeForSeat(room, seat) {
     allHands: (room.phase === "finished" || room.phase === "gameover") ? room.hands : null,
     turn: room.turn,
     turnStartedAt: room.turnStartedAt,
-    turnSeconds: TURN_SECONDS,
+    turnSeconds: room.lastPlayerSeat === null ? LEAD_TURN_SECONDS : TURN_SECONDS,
     lastPlayerSeat: room.lastPlayerSeat,
     passedThisTrick: room.passedThisTrick,
     trickPile: room.trickPile,
@@ -255,10 +256,11 @@ function scheduleTurn(room) {
   if (room.phase !== "playing") return;
   const seat = room.turn;
   const isBot = room.players[seat] === null;
+  const duration = room.lastPlayerSeat === null ? LEAD_TURN_SECONDS : TURN_SECONDS;
   if (isBot) {
     room.botTimer = setTimeout(() => botAct(room), 1200);
   } else {
-    room.turnTimer = setTimeout(() => autoTimeout(room), TURN_SECONDS * 1000);
+    room.turnTimer = setTimeout(() => autoTimeout(room), duration * 1000);
   }
 }
 
@@ -423,17 +425,24 @@ function botChooseMove(room, seat, prevCards, prevCombo) {
         .sort((a, b) => b.cards.length - a.cards.length || a.combo.power[a.combo.power.length - 1] - b.combo.power[b.combo.power.length - 1]);
       if (multi.length) return multi[0].cards;
     }
-    // default: mostly lead cheap singles, sometimes shed a pair/triple/5-set for variety
+    // default: mostly lead cheap singles, sometimes shed a pair/triple/5-set
+    // for variety — but never waste a genuinely strong combo (containing a
+    // 2, Ace, or King) here just for variety when there's no urgency; those
+    // are only worth using via the blocking/multiplier-escape/endgame logic
+    // above. If literally the only options left ARE strong, fall through.
+    const isPrecious = (cards) => cards.some(c => c.rank === "2" || c.rank === "A" || c.rank === "K");
     const singles = valid.filter(p => p.cards.length === 1);
-    const pairs = valid.filter(p => p.cards.length === 2);
-    const triples = valid.filter(p => p.cards.length === 3);
-    const fives = valid.filter(p => p.cards.length === 5);
+    const pairs = valid.filter(p => p.cards.length === 2 && !isPrecious(p.cards));
+    const triples = valid.filter(p => p.cards.length === 3 && !isPrecious(p.cards));
+    const fives = valid.filter(p => p.cards.length === 5 && !isPrecious(p.cards));
     const roll = Math.random();
-    if (roll < 0.55 || (pairs.length === 0 && fives.length === 0 && triples.length === 0)) return singles[0].cards;
+    if (roll < 0.55 || (pairs.length === 0 && fives.length === 0 && triples.length === 0)) {
+      return singles.length ? singles[0].cards : valid[0].cards;
+    }
     if (roll < 0.8 && pairs.length) return pairs[0].cards;
     if (roll < 0.93 && fives.length) return fives[0].cards;
     if (triples.length) return triples[0].cards;
-    return singles[0].cards;
+    return singles.length ? singles[0].cards : valid[0].cards;
   }
 
   // RESPONDING to an active trick
