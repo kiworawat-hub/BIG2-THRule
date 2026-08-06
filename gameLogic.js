@@ -108,7 +108,10 @@ function classifyCombo(cards) {
     // numerically consecutive under the internal ranking order.
     if (ranks.includes("2")) isStraight = false;
     if (isStraight && isFlush) return { type: "straightflush", power: [4, idxs[4], cardValue(sorted[4])] };
-    if (isFlush) return { type: "flush", power: [1, cardValue(sorted[4])] };
+    if (isFlush) {
+      const rankIdxsDesc = ranks.map(r => rankIdx(r)).sort((a, b) => b - a);
+      return { type: "flush", power: [1, ...rankIdxsDesc, suitIdx(suits[0])] };
+    }
     if (isStraight) return { type: "straight", power: [0, idxs[4], cardValue(sorted[4])] };
     return null;
   }
