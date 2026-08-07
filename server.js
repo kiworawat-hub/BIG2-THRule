@@ -409,25 +409,79 @@ function botChooseMove(room, seat, prevCards, prevCombo) {
   if (valid.length === 0) return null;
 
   const others = [0, 1, 2, 3].filter(s => s !== seat && !room.finished.includes(s));
-  const dangerSeats = others.filter(s => room.hands[s].length <= 2); // one or two cards from winning
-  const victimSeats = others.filter(s => room.hands[s].length >= 10); // in or heading into the multiplier zone
+  const counts = {};
+  others.forEach(s => { counts[s] = room.hands[s].length; });
+  const dangerSeats = others.filter(s => counts[s] <= 2); // one or two cards from winning
+  const victimSeats = others.filter(s => counts[s] >= 10); // in or heading into the multiplier zone
   const myCount = hand.length;
   const myMultiplierZone = myCount >= 12 ? 3 : myCount >= 10 ? 2 : 1; // matches the actual scoring thresholds
+  const minOtherCount = others.length ? Math.min(...others.map(s => counts[s])) : 99;
+
+  function opponentCanBeat(oppSeat, combo, cards) {
+    const theirOptions = generateAllCombos(room.hands[oppSeat]);
+    return theirOptions.some(o => o.combo && comboBeats(o.combo, combo, o.cards, cards));
+  }
+  function findUnbeatableLead(candidates, targetSeats) {
+    for (const opt of candidates) {
+      if (!targetSeats.some(ts => opponentCanBeat(ts, opt.combo, opt.cards))) return opt;
+    }
+    return null;
+  }
 
   if (!prevCombo) {
     // LEADING — free choice of any combo type
-    if (dangerSeats.length > 0) {
+    const iCannotWin = others.length > 0 && others.every(s => counts[s] < myCount);
+    const shouldHelpNearWinner = dangerSeats.length > 0 && victimSeats.length > 0 && iCannotWin && myMultiplierZone === 1;
+
+    if (shouldHelpNearWinner) {
+      // I have no realistic path to winning this round myself, and a
+      // genuine victim is stuck with a lot of cards. Blocking the near
+      // winner here would only drag the round out without ever benefiting
+      // me — better to hand them an easy single to respond to and help
+      // them finish fast, locking in the victim's bad position. A pair or
+      // bigger combo risks being something they can't answer, stalling
+      // their progress for nothing.
+      const singles = valid.filter(p => p.cards.length === 1);
+      if (singles.length) return singles[0].cards;
+    }
+
+    // Deny a middle victim a turn entirely: if the very next player to act
+    // (right after my lead) is a victim, and a near winner exists further
+    // down the rotation, lead my strongest single they can't beat. They're
+    // forced to pass without ever getting a shot at shedding a card this
+    // trick — even if I don't know their exact hand, denying them the turn
+    // outright protects the multiplier regardless of what they're holding.
+    if (!shouldHelpNearWinner && victimSeats.length > 0 && dangerSeats.length > 0) {
+      const nextActor = resolveNextTurn(room.finished, [], seat, seat).nextTurn;
+      if (victimSeats.includes(nextActor)) {
+        const strongestFirst = valid.filter(p => p.cards.length === 1).sort((a, b) => b.combo.power[1] - a.combo.power[1]);
+        const deny = strongestFirst.find(opt => !opponentCanBeat(nextActor, opt.combo, opt.cards));
+        if (deny) return deny.cards;
+      }
+    }
+
+    if (!shouldHelpNearWinner && dangerSeats.length > 0) {
       // try to find a lead that NONE of the dangerous opponents can beat,
       // checking their actual hands (cheapest/smallest options first)
       const blockCandidates = sortByCheapest(valid.filter(p => p.cards.length >= 2));
-      for (const opt of blockCandidates) {
-        const someoneCanBeatIt = dangerSeats.some(ds => {
-          const theirOptions = generateAllCombos(room.hands[ds]);
-          return theirOptions.some(o => o.combo && comboBeats(o.combo, opt.combo, o.cards, opt.cards));
-        });
-        if (!someoneCanBeatIt) return opt.cards;
+      const block = findUnbeatableLead(blockCandidates, dangerSeats);
+      if (block) return block.cards;
+    }
+
+    // I'm already stuck in the multiplier zone myself — misery loves
+    // company. Hindering an opponent who's AHEAD of me (fewer cards) from
+    // clearing out easily doesn't reduce what I owe the eventual winner,
+    // but it drags that opponent's own final count up, which helps me in
+    // every pairwise comparison against them specifically.
+    if (myMultiplierZone > 1) {
+      const aheadSeats = others.filter(s => counts[s] < myCount);
+      if (aheadSeats.length > 0) {
+        const hinderCandidates = sortByCheapest(valid.filter(p => p.cards.length >= 2));
+        const hinder = findUnbeatableLead(hinderCandidates, aheadSeats);
+        if (hinder) return hinder.cards;
       }
     }
+
     // loss minimization: escaping the 2x/3x multiplier zone is worth
     // shedding cards aggressively for, same urgency as an actual endgame
     if (myMultiplierZone > 1 || myCount <= 6) {
@@ -435,7 +489,25 @@ function botChooseMove(room, seat, prevCards, prevCombo) {
       const multi = [...valid.filter(p => p.cards.length >= 2)]
         .sort((a, b) => b.cards.length - a.cards.length || a.combo.power[a.combo.power.length - 1] - b.combo.power[b.combo.power.length - 1]);
       if (multi.length) return multi[0].cards;
+
+      // no multi-card combo left — choosing among singles. If a victim
+      // exists and I'll still have cards left after this play, lead my
+      // STRONGEST single that nobody can beat, instead of my weakest.
+      // A weak lead here is a free invitation for a victim to legally
+      // dump their own 2 or Ace; an unbeatable lead denies them that
+      // chance entirely and saves my genuinely weak cards for the very
+      // last play, when the round ends before they get a turn to matter.
+      const singles = valid.filter(p => p.cards.length === 1);
+      if (victimSeats.length > 0 && myCount > 1 && singles.length > 1) {
+        const safe = sortByCheapest(singles).filter(s => !others.some(o => opponentCanBeat(o, s.combo, s.cards)));
+        if (safe.length) {
+          const strongest = safe.sort((a, b) => b.combo.power[1] - a.combo.power[1])[0];
+          return strongest.cards;
+        }
+      }
+      if (singles.length) return singles[0].cards;
     }
+
     // default: mostly lead cheap singles, sometimes shed a pair/triple/5-set
     // for variety — but never waste a genuinely strong combo (containing a
     // 2, Ace, or King) here just for variety when there's no urgency; those
@@ -468,14 +540,22 @@ function botChooseMove(room, seat, prevCards, prevCombo) {
   //    now is worth far less than the penalty of staying stuck at x2/x3
   if (myMultiplierZone > 1) return cheapest.cards;
 
-  // 2) strategic pass: the current leader is about to win, and some OTHER
-  //    opponent (not the leader, not me) is already stuck with a lot of
-  //    cards — better to let the leader finish the round right now and
-  //    lock in that opponent's bad position than to extend the trick and
-  //    give them more chances to unload cards before it ends
+  // 2) strategic pass: the current leader is about to win. Let them finish
+  //    right now instead of extending the trick, when either:
+  //    a) some OTHER opponent (not the leader, not me) is already stuck
+  //       with a lot of cards — locks in their bad position, or
+  //    b) I clearly can't win this round myself (I have more cards than
+  //       everyone else) and there's no more multiplier value left to
+  //       fight for, and the leader is the seat right before me in turn
+  //       order — letting them win means I act early (right after the
+  //       lead) next round instead of last, a real positional edge
   if (ownerDangerous && myCount > 3) {
     const otherVictims = victimSeats.filter(s => s !== ownerSeat);
-    if (otherVictims.length > 0) return null;
+    const leaderIsRightBeforeMe = (seat - 1 + 4) % 4 === ownerSeat;
+    const clearlyCantWin = others.every(s => counts[s] < myCount);
+    if (otherVictims.length > 0 || (leaderIsRightBeforeMe && clearlyCantWin && victimSeats.length === 0)) {
+      return null;
+    }
   }
 
   // 3) conserve strength: no one is in immediate danger, it's still early,
