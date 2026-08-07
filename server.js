@@ -86,20 +86,25 @@ function broadcastState(code) {
 }
 
 function cumulativeScores(room) {
-  const totalsByName = {};
-  const botTotals = [0, 0, 0, 0]; // positional fallback — bots have no persistent identity across reseats
+  const totals = [0, 0, 0, 0];
+  const botSeats = [0, 1, 2, 3].filter(s => room.players[s] === null);
   room.roundHistory.forEach(r => {
-    const namesAtRound = r.players || room.players;
-    r.net.forEach((v, i) => {
-      const name = namesAtRound[i];
-      if (name) totalsByName[name] = (totalsByName[name] || 0) + v;
-      else botTotals[i] += v;
+    const rowPlayers = r.players || room.players;
+    const usedIndices = new Set();
+    // match every currently-seated human by name, wherever they sat that round
+    room.players.forEach((name, colSeat) => {
+      if (!name) return;
+      const idx = rowPlayers.indexOf(name);
+      if (idx !== -1) { totals[colSeat] += r.net[idx]; usedIndices.add(idx); }
+    });
+    // whatever's left over that round belongs to current bot seats, in order —
+    // bots have no persistent identity, so this is the only sensible mapping
+    const leftover = [0, 1, 2, 3].filter(i => !usedIndices.has(i));
+    botSeats.forEach((colSeat, i) => {
+      if (leftover[i] !== undefined) totals[colSeat] += r.net[leftover[i]];
     });
   });
-  return [0, 1, 2, 3].map(s => {
-    const name = room.players[s];
-    return name ? (totalsByName[name] || 0) : botTotals[s];
-  });
+  return totals;
 }
 
 function sanitizeForSeat(room, seat) {
