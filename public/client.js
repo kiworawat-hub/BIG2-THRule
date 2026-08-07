@@ -300,8 +300,11 @@ function HistoryModal({ roundHistory, players, mySeat, cumulative, onClose }) {
   const [viewRound, setViewRound] = useState(null);
   function valueFor(row, colSeat) {
     const colName = players[colSeat];
-    if (!row.players || colName === null) return row.net[colSeat];
-    const idx = row.players.indexOf(colName);
+    const rowPlayers = row.players || players;
+    if (colName === null) {
+      return rowPlayers[colSeat] === null ? row.net[colSeat] : null;
+    }
+    const idx = rowPlayers.indexOf(colName);
     return idx === -1 ? null : row.net[idx];
   }
   return /* @__PURE__ */ React.createElement("div", { style: styles.modalOverlay, onClick: onClose }, /* @__PURE__ */ React.createElement("div", { style: styles.modalCard, onClick: (e) => e.stopPropagation() }, /* @__PURE__ */ React.createElement("h2", { style: { color: "#d4af37", textAlign: "center", marginBottom: 12 } }, "\u0E1B\u0E23\u0E30\u0E27\u0E31\u0E15\u0E34\u0E04\u0E30\u0E41\u0E19\u0E19"), !roundHistory || roundHistory.length === 0 ? /* @__PURE__ */ React.createElement("p", { style: { color: "#8a9a8e", textAlign: "center" } }, "\u0E22\u0E31\u0E07\u0E44\u0E21\u0E48\u0E21\u0E35\u0E23\u0E2D\u0E1A\u0E17\u0E35\u0E48\u0E08\u0E1A\u0E04\u0E23\u0E31\u0E1A") : /* @__PURE__ */ React.createElement("div", { style: { overflowX: "auto" } }, /* @__PURE__ */ React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: 12 } }, /* @__PURE__ */ React.createElement("thead", null, /* @__PURE__ */ React.createElement("tr", null, /* @__PURE__ */ React.createElement("th", { style: { color: "#8a9a8e", padding: "4px 8px", textAlign: "center", borderBottom: "1px solid #2f5f8f" } }, "\u0E23\u0E2D\u0E1A"), [0, 1, 2, 3].map((s) => /* @__PURE__ */ React.createElement("th", { key: s, style: { color: "#8a9a8e", padding: "4px 8px", textAlign: "center", borderBottom: "1px solid #2f5f8f", whiteSpace: "nowrap" } }, s === mySeat ? "\u0E04\u0E38\u0E13" : players[s] || `\u0E1A\u0E2D\u0E17 ${s + 1}`)), /* @__PURE__ */ React.createElement("th", { style: { color: "#8a9a8e", padding: "4px 8px", textAlign: "center", borderBottom: "1px solid #2f5f8f" } }))), /* @__PURE__ */ React.createElement("tbody", null, roundHistory.map((r) => /* @__PURE__ */ React.createElement("tr", { key: r.round }, /* @__PURE__ */ React.createElement("td", { style: { color: "#f4e9d8", padding: "4px 8px", textAlign: "center", borderBottom: "1px solid rgba(255,255,255,.05)" } }, r.round), [0, 1, 2, 3].map((s) => {
