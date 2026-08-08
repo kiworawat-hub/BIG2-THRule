@@ -42,7 +42,8 @@ function makeRoomCode() {
 function newRoomState(hostName, hostSocketId) {
   return {
     phase: "waiting", // waiting | seatdraw | playing | finished | gameover
-    players: [hostName, null, null, null], // display names, null = open seat (bot fills it)
+    players: [hostName, "บอท 2", "บอท 3", "บอท 4"], // every seat has a persistent display name, human or bot
+    isBot: [false, true, true, true], // which seats are AI-controlled — this is what actually drives bot behavior, not the name
     socketIds: [hostSocketId, null, null, null],
     hands: [[], [], [], []],
     turn: null,
@@ -87,21 +88,11 @@ function broadcastState(code) {
 
 function cumulativeScores(room) {
   const totals = [0, 0, 0, 0];
-  const botSeats = [0, 1, 2, 3].filter(s => room.players[s] === null);
   room.roundHistory.forEach(r => {
     const rowPlayers = r.players || room.players;
-    const usedIndices = new Set();
-    // match every currently-seated human by name, wherever they sat that round
     room.players.forEach((name, colSeat) => {
-      if (!name) return;
       const idx = rowPlayers.indexOf(name);
-      if (idx !== -1) { totals[colSeat] += r.net[idx]; usedIndices.add(idx); }
-    });
-    // whatever's left over that round belongs to current bot seats, in order —
-    // bots have no persistent identity, so this is the only sensible mapping
-    const leftover = [0, 1, 2, 3].filter(i => !usedIndices.has(i));
-    botSeats.forEach((colSeat, i) => {
-      if (leftover[i] !== undefined) totals[colSeat] += r.net[leftover[i]];
+      if (idx !== -1) totals[colSeat] += r.net[idx];
     });
   });
   return totals;
@@ -112,6 +103,7 @@ function sanitizeForSeat(room, seat) {
     code: room.code,
     phase: room.phase,
     players: room.players,
+    isBot: room.isBot,
     mySeat: seat,
     myHand: room.hands[seat] || [],
     handCounts: room.hands.map(h => h.length),
@@ -171,6 +163,7 @@ function beginSeatDraw(room, pendingRound, winnerOldSeat) {
   room.seatDraw = {
     cards, order, picks: {}, pendingRound,
     playersAtDraw: [...room.players],
+    isBotAtDraw: [...room.isBot],
     socketIdsAtDraw: [...room.socketIds],
     winnerOldSeat: winnerOldSeat ?? null,
     startedAt: Date.now(),
@@ -214,12 +207,15 @@ function applySeatPick(room, pickerOldSeat, newSeat) {
   if (Object.keys(picks).length >= 4) {
     const newPlayers = [null, null, null, null];
     const newSocketIds = [null, null, null, null];
+    const newIsBot = [null, null, null, null];
     [0, 1, 2, 3].forEach(oldSeat => {
       newPlayers[picks[oldSeat]] = sd.playersAtDraw[oldSeat];
       newSocketIds[picks[oldSeat]] = sd.socketIdsAtDraw[oldSeat];
+      newIsBot[picks[oldSeat]] = sd.isBotAtDraw[oldSeat];
     });
     room.players = newPlayers;
     room.socketIds = newSocketIds;
+    room.isBot = newIsBot;
     const forcedLeader = (sd.winnerOldSeat !== null && sd.winnerOldSeat !== undefined) ? picks[sd.winnerOldSeat] : null;
     broadcastState(room.code); // show the completed layout briefly
     const elapsed = Date.now() - sd.startedAt;
@@ -260,7 +256,7 @@ function scheduleTurn(room) {
   clearTimers(room);
   if (room.phase !== "playing") return;
   const seat = room.turn;
-  const isBot = room.players[seat] === null;
+  const isBot = room.isBot[seat];
   const duration = room.lastPlayerSeat === null ? LEAD_TURN_SECONDS : TURN_SECONDS;
   if (isBot) {
     room.botTimer = setTimeout(() => botAct(room), 1200);
@@ -278,7 +274,7 @@ function applyPass(room, seat) {
   if (resolved.reset) room.trickPile = [];
   room.turn = resolved.nextTurn;
   room.turnStartedAt = Date.now();
-  room.log.push(`${room.players[seat] || `บอท ${seat + 1}`} ผ่าน`);
+  room.log.push(`${room.players[seat]} ผ่าน`);
   scheduleTurn(room);
 }
 
@@ -293,7 +289,7 @@ function applyPlay(room, seat, cards) {
   room.lastPlayerSeat = seat;
   room.trickPile = [...room.trickPile, { cards, seat }];
   room.everPlayed = true;
-  const label = room.players[seat] || `บอท ${seat + 1}`;
+  const label = room.players[seat];
   room.log.push(`${label} ลงไพ่ ${cards.map(c => c.rank + c.suit).join(" ")}`);
 
   if (newHand.length === 0) {
@@ -635,11 +631,13 @@ io.on("connection", (socket) => {
   socket.on("joinRoom", ({ name, code }, cb) => {
     const room = rooms.get((code || "").toUpperCase());
     if (!room) return cb({ ok: false, error: "ไม่พบห้องนี้" });
-    let seat = room.players.findIndex(p => p === (name || "").trim());
+    const trimmedName = (name || "").trim();
+    let seat = room.players.findIndex((p, i) => !room.isBot[i] && p === trimmedName);
     if (seat === -1) {
-      seat = room.players.findIndex(p => p === null);
+      seat = room.isBot.findIndex(b => b === true);
       if (seat === -1) return cb({ ok: false, error: "ห้องเต็มแล้ว" });
-      room.players[seat] = (name || "").trim();
+      room.players[seat] = trimmedName;
+      room.isBot[seat] = false;
     }
     room.socketIds[seat] = socket.id;
     socket.join(room.code);
@@ -703,7 +701,7 @@ io.on("connection", (socket) => {
     if (seat === -1) return;
     const trimmed = (text || "").trim().slice(0, 200); // keep messages short
     if (!trimmed) return;
-    const msg = { seat, name: room.players[seat] || `บอท ${seat + 1}`, text: trimmed, at: Date.now() };
+    const msg = { seat, name: room.players[seat], text: trimmed, at: Date.now() };
     room.chat = room.chat || [];
     room.chat.push(msg);
     if (room.chat.length > 100) room.chat = room.chat.slice(-100); // keep it bounded
