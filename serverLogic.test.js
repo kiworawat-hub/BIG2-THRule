@@ -54,34 +54,30 @@ function finishedRoom(winner, left, over) {
 
 (async () => {
   // ------------------------------------------------------------------
-  console.log("\nthe plays of the round in progress");
+  console.log("\nthe trick on the table -- what tapping it lists");
   {
     const room = makeRoom();
     S.startRound(room, 0);
     room.hands = [H("3♣", "9♦"), H("5♦", "6♦", "J♦"), H("7♦", "8♦"), H("9♣", "10♣")];
-    S.applyPlay(room, 0, H("3♣"));            // 1: opens the trick
-    S.applyPlay(room, 1, H("5♦"));            // 2: answers it
-    S.applyPass(room, 2); S.applyPass(room, 3); S.applyPass(room, 0);
-    // everyone else passed on seat 1's card, so the trick is over and seat 1 leads
-    ok("the trick reset and seat 1 leads again", room.lastPlayerSeat === null && room.turn === 1);
-    S.applyPlay(room, 1, H("6♦"));            // 3: opens the next trick
-
-    const p = room.roundPlays;
-    ok("three plays were recorded", p.length === 3);
-    ok("numbered 1, 2, 3 in the order they happened", p.map((x) => x.n).join(",") === "1,2,3");
-    ok("with who played each", p.map((x) => x.seat).join(",") === "0,1,1");
-    ok("and what they played", p[0].cards[0].rank === "3" && p[1].cards[0].rank === "5" && p[2].cards[0].rank === "6");
-    ok("marking the plays that opened a trick", p.map((x) => x.lead).join(",") === "true,false,true");
-    ok("passes are not plays", p.length === 3);
-    ok("the state broadcast carries only the count", S.sanitizeForSeat(room, 0).playsCount === 3 &&
-       !("roundPlays" in S.sanitizeForSeat(room, 0)));
-
+    const pile = (seat) => S.sanitizeForSeat(room, seat).trickPile;
+    S.applyPlay(room, 0, H("3♣"));            // opens the trick
+    S.applyPlay(room, 1, H("5♦"));            // answers it
+    ok("the pile holds the trick's plays, in order", pile(0).length === 2 && pile(0).map((e) => e.seat).join(",") === "0,1");
+    ok("with what was played", pile(0)[0].cards[0].rank === "3" && pile(0)[1].cards[0].rank === "5");
+    S.applyPass(room, 2);
+    ok("a pass adds nothing", pile(0).length === 2);
+    S.applyPass(room, 3); S.applyPass(room, 0);
+    ok("the trick is over and seat 1 leads again", room.lastPlayerSeat === null && room.turn === 1);
+    ok("and the moment it ended the pile was emptied -- the old trick can no longer be listed", pile(0).length === 0);
+    S.applyPlay(room, 1, H("6♦"));
+    ok("a fresh lead starts a fresh list of one", pile(0).length === 1 && pile(0)[0].cards[0].rank === "6");
+    ok("none of the old trick is in it", !pile(0).some((e) => e.cards.some((c) => c.rank === "3" || c.rank === "5")));
+    ok("players and watchers are given the same pile", JSON.stringify(pile(-1)) === JSON.stringify(pile(2)));
+    ok("nothing on the server keeps the old tricks of the round around", !("roundPlays" in room));
     room.hands[1] = [];
     S.finishRound(room, 1);
-    ok("once the round ends, its plays are gone", room.roundPlays.length === 0);
-    ok("and the count says so", S.sanitizeForSeat(room, 0).playsCount === 0);
     S.startRound(room, 1);
-    ok("a new round starts from an empty list", room.roundPlays.length === 0);
+    ok("a new round starts with an empty pile", pile(0).length === 0);
   }
 
   // ------------------------------------------------------------------
@@ -217,11 +213,11 @@ function finishedRoom(winner, left, over) {
   console.log("\nsoak: whole games without waiting on the clocks");
   {
     const G = require("./gameLogic");
-    let games = 0, stuck = 0, broke = 0, forcedChecks = 0, lostCards = 0, playCountWrong = 0, threw = 0;
+    let games = 0, stuck = 0, broke = 0, forcedChecks = 0, lostCards = 0, pileWrong = 0, threw = 0;
     for (let g = 0; g < 80; g++) {
       const room = makeRoom({ players: [null, null, null, null], socketIds: [null, null, null, null] });
       S.startRound(room, undefined);
-      let steps = 0, plays = 0;
+      let steps = 0;
       try {
         while (room.phase === "playing" && room.turn !== null && steps < 1500) {
           steps++;
@@ -235,7 +231,6 @@ function finishedRoom(winner, left, over) {
           if (steps % 5 === 0) S.autoTimeout(room); else S.botAct(room);
           const after = room.hands[seat].map((x) => x.rank + x.suit);
           const gone = before.filter((k) => !after.includes(k));
-          if (gone.length) plays++;
           if (forced) {
             forcedChecks++;
             // The rule only binds a SINGLE: a pair / triple / 5-set is always allowed. So when it
@@ -248,6 +243,8 @@ function finishedRoom(winner, left, over) {
             }
           }
           if (room.hands.reduce((n, h) => n + h.length, 0) !== total - gone.length) lostCards++;
+          // the pile on the table is empty exactly when nobody has led into the current trick
+          if ((room.trickPile.length === 0) !== (room.lastPlayerSeat === null)) pileWrong++;
           if (room.turn === null) break; // the winning card is down; the round is over
         }
       } catch (e) { threw++; console.log("    threw:", e.message); }
@@ -255,7 +252,6 @@ function finishedRoom(winner, left, over) {
         games++;
         S.clearTimers(room);
         const winner = room.hands.findIndex((h) => h.length === 0);
-        if (room.roundPlays.length !== plays) playCountWrong++;
         S.finishRound(room, winner);
         S.clearTimers(room);
       }
@@ -265,7 +261,7 @@ function finishedRoom(winner, left, over) {
     ok("the last-card rule came up often enough to mean something (" + forcedChecks + " times)", forcedChecks >= 40);
     ok("every time it did, the bot or the timeout obeyed it", broke === 0);
     ok("no card was ever lost or duplicated", lostCards === 0);
-    ok("the plays list matched the plays made, every round", playCountWrong === 0);
+    ok("the pile on the table was always exactly the current trick", pileWrong === 0);
   }
 
   // ------------------------------------------------------------------
@@ -274,29 +270,6 @@ function finishedRoom(winner, left, over) {
   await new Promise((r) => S.server.listen(PORT, r));
   const sock = connect("http://localhost:" + PORT);
   await new Promise((r) => sock.on("connect", r));
-  let lastState = null;
-  sock.on("state", (s) => { lastState = s; });
-  const create = await new Promise((r) => sock.emit("createRoom", { name: "Host" }, r));
-  const room = S.rooms.get(create.code);
-  const ask = (ev, payload) => new Promise((r) => sock.emit(ev, payload, r));
-
-  ok("no plays to list before the game starts", (await ask("getRoundPlays", {})).ok === false);
-
-  room.players = ["Host", "B", "C", "D"];
-  room.socketIds = [sock.id, "s1", "s2", "s3"];
-  S.startRound(room, 0);
-  room.hands = [H("3♣", "9♦"), H("5♦", "6♦"), H("7♦", "8♦"), H("9♣", "10♣")];
-  S.applyPlay(room, 0, H("3♣"));
-  S.applyPlay(room, 1, H("5♦"));
-  const listed = await ask("getRoundPlays", {});
-  ok("during the round the plays come back", listed.ok === true && listed.plays.length === 2);
-  ok("in order, with who played what", listed.plays[0].seat === 0 && listed.plays[1].cards[0].rank === "5");
-
-  room.hands[1] = [];
-  S.finishRound(room, 1);
-  const after = await ask("getRoundPlays", {});
-  ok("after the round ends they can no longer be looked up", after.ok === false && after.plays.length === 0);
-
   // seat 0 (the socket) is multiplied on leg 3 of a round seat 2 won
   const sock2 = connect("http://localhost:" + PORT);
   await new Promise((r) => sock2.on("connect", r));
