@@ -51,13 +51,7 @@ const historyRows = [{
   hands: [[], deal("♦").slice(0, 6), deal("♥").slice(0, 4), deal("♠").slice(0, 8)],
   startingHands: [deal("♣"), deal("♦"), deal("♥"), deal("♠")],
 }];
-// what the server reports for the round in progress (tapping the table)
 const cc = (rank, suit) => ({ rank, suit });
-let playsRows = [
-  { n: 1, seat: 1, lead: true, cards: [cc("5", "♦")] },
-  { n: 2, seat: 0, lead: false, cards: [cc("K", "♠")] },
-  { n: 3, seat: 2, lead: true, cards: [cc("8", "♦"), cc("8", "♣")] },
-];
 const fakeSocket = {
   on: (ev, fn) => { (handlers[ev] ||= []).push(fn); },
   off: () => {},
@@ -67,7 +61,6 @@ const fakeSocket = {
     if (ev === "joinRoom" && joinShouldFail) cb({ ok: false, error: "ไม่พบห้องนี้" });
     else if (ev === "listRooms") cb({ ok: true, rooms: roomsOnAir });
     else if (ev === "getHistory") cb({ ok: true, roundHistory: historyRows });
-    else if (ev === "getRoundPlays") cb({ ok: true, plays: playsRows });
     else cb({ ok: true, code: "TEST", seat: 0, token: "tok" });
   },
   close: () => {}, disconnect: () => {},
@@ -334,30 +327,46 @@ const byLabel = (s) => buttons().find((b) => (b.textContent || "").includes(s));
   ok("the finished tick is its own element, so a long name cannot push it out", !!tick && tick.style.flexShrink === "0");
   ok("the box is still the same size with the tick", seatBoxes().every((d) => d.style.width === "64px"));
 
-  console.log("\ntapping the table lists what has been played this round");
-  serverSays("state", playingState({ playsCount: 3 }));
+  console.log("\ntapping the table lists the trick that is on it");
+  // the trick on the table, oldest first -- exactly what the server puts in trickPile
+  const trick1 = [
+    { seat: 1, cards: [cc("5", "♦")] },
+    { seat: 0, cards: [cc("K", "♠")] },
+    { seat: 2, cards: [cc("8", "♦"), cc("8", "♣")] },
+  ];
+  serverSays("state", playingState({ trickPile: trick1 }));
   await settle();
   const felt = () => [...document.querySelectorAll("div")].find((d) => d.style.borderRadius === "50%" && d.style.cursor === "pointer");
-  const playsModal = () => [...document.querySelectorAll("div")].find((d) => d.style.position === "fixed" && (d.textContent || "").includes("ไพ่ที่ลงแล้วในรอบนี้"));
+  const playsModal = () => [...document.querySelectorAll("div")].find((d) => d.style.position === "fixed" && (d.textContent || "").includes("ไพ่ที่ลงในกองนี้"));
   ok("the table is tappable during a round", !!felt());
   ok("nothing is open yet", !playsModal());
   sent.length = 0;
   if (felt()) felt().click();
   await settle();
-  ok("tapping it asks the server for the plays", sent.some((m) => m.ev === "getRoundPlays"));
-  ok("and shows them", !!playsModal());
+  ok("tapping it shows the list", !!playsModal());
+  ok("and asks the server for nothing: the trick is already in the state", sent.length === 0);
   const pm = () => (playsModal() ? playsModal().textContent : "");
   ok("numbered from 1, with who played and what, in order",
      pm().includes("1Ann5♦") && pm().includes("2คุณK♠") && pm().indexOf("1Ann") < pm().indexOf("2คุณ") && pm().indexOf("2คุณ") < pm().indexOf("3บอท 3"));
   ok("your own plays say คุณ, the bots' say their name", pm().includes("2คุณ") && pm().includes("บอท 3"));
   ok("a pair is shown as both cards, smallest first", pm().includes("3บอท 38♣8♦"));
-  // (the modal's own frame has a border too, so count only the row dividers: the faint ones)
-  const dividers = [...playsModal().querySelectorAll("div")].filter((d) => (d.style.borderTop || "").includes("0.18"));
-  ok("a new trick after the first is marked with a divider (the first play needs none)", dividers.length === 1);
-  sent.length = 0;
-  serverSays("state", playingState({ playsCount: 4 }));
+  ok("it says an old trick goes when somebody leads again", pm().includes("กองเก่าจะหายไป"));
+
+  // somebody plays on: the open list follows the table
+  serverSays("state", playingState({ trickPile: [...trick1, { seat: 3, cards: [cc("Q", "♣"), cc("Q", "♥")] }] }));
   await settle();
-  ok("while it is open, a new play refreshes it", sent.some((m) => m.ev === "getRoundPlays"));
+  ok("while it is open, a new play is added to it", pm().includes("4บอท 4"));
+
+  // everyone passed and a new player leads: the pile on the table is a new one
+  serverSays("state", playingState({ trickPile: [{ seat: 2, cards: [cc("4", "♣")] }] }));
+  await settle();
+  ok("after a fresh lead the list is only the new trick", pm().includes("1บอท 34♣") && !pm().includes("Ann") && !pm().includes("K♠"));
+  ok("none of the old trick can be found in it", !pm().includes("8♦") && !pm().includes("Q♣") && !pm().includes("5♦"));
+  ok("and it is numbered from 1 again", !pm().includes("2"));
+  serverSays("state", playingState({ trickPile: [] }));
+  await settle();
+  ok("with nothing on the table there is nothing to list", pm().includes("ยังไม่มีใครลงไพ่ในกองนี้"));
+
   const roundOver = (over) => playingState(Object.assign({
     phase: "finished", turn: null, finished: [1], round: 3, handCounts: [12, 0, 4, 3],
     allHands: [deal("♣").slice(0, 12), [], deal("♦").slice(0, 4), deal("♥").slice(0, 3)],
@@ -365,13 +374,12 @@ const byLabel = (s) => buttons().find((b) => (b.textContent || "").includes(s));
   }, over || {}));
   serverSays("state", roundOver());
   await settle();
-  ok("when the round ends the list closes by itself -- it cannot be looked at afterwards", !playsModal());
-  serverSays("state", playingState({ mySeat: -1, myHand: [], code: null, observers: 1, playsCount: 3 }));
+  ok("when the round ends the list closes by itself", !playsModal());
+  serverSays("state", playingState({ mySeat: -1, myHand: [], code: null, observers: 1, trickPile: trick1 }));
   await settle();
-  sent.length = 0;
   if (felt()) felt().click();
   await settle();
-  ok("someone watching can tap the table too", !!playsModal() && sent.some((m) => m.ev === "getRoundPlays"));
+  ok("someone watching can tap the table too", !!playsModal() && pm().includes("1Ann5♦"));
   serverSays("state", playingState());
   await settle();
 
