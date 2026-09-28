@@ -7,7 +7,7 @@ const { useState, useEffect, useRef, useCallback } = React;
 
 // Shown in the lobby so a player can say which version they are looking at.
 // Keep in step with package.json and CHANGELOG.md.
-const APP_VERSION = "1.4.0";
+const APP_VERSION = "1.5.0";
 
 // A friend opening big2unity.onrender.com/?room=KQ7M lands with the code
 // already filled in, so joining is one tap instead of typing it correctly.
@@ -108,6 +108,28 @@ applyTheme((() => {
     return saved && saved.theme;
   } catch (e) { return "classic"; }
 })());
+// Which end of the hand the small cards sit at. A choice of two, so it is drawn
+// as radio buttons (aria-checked), not toggles.
+const SORT_DIRS = [
+  { id: "asc", name: "เล็ก → ใหญ่", note: "3 ซ้ายสุด · 2 ขวาสุด" },
+  { id: "desc", name: "ใหญ่ → เล็ก", note: "2 ซ้ายสุด · 3 ขวาสุด" },
+];
+function SortDirPicker({ current, onPick }) {
+  const active = current === "desc" ? "desc" : "asc";
+  return /* @__PURE__ */ React.createElement("div", { role: "radiogroup", style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 } }, SORT_DIRS.map((d) => {
+    const on = d.id === active;
+    return /* @__PURE__ */ React.createElement("button", { key: d.id, role: "radio", "aria-checked": on, onClick: () => onPick(d.id), style: {
+      padding: "8px 10px",
+      borderRadius: 10,
+      cursor: "pointer",
+      textAlign: "left",
+      fontFamily: "inherit",
+      color: CREAM,
+      background: "rgba(255,255,255,.04)",
+      border: on ? `2px solid ${GOLD}` : "1px solid rgba(255,255,255,.14)"
+    } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 700 } }, d.name, on && " ✓"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: MUTED, marginTop: 2 } }, d.note));
+  }));
+}
 // one small picture of a theme: its backdrop with its table on it
 function ThemePicker({ current, onPick }) {
   const active = themeById(current).id;
@@ -161,11 +183,16 @@ function cardKey(c) {
 // nor cares how you arrange your cards.
 const RANK_ORDER = ["3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A", "2"];
 const SUIT_ORDER = ["♣", "♦", "♥", "♠"];
-function sortCards(cards, mode) {
+// dir "asc" puts the smallest card on the left (3 first, 2 last); "desc" is the
+// exact mirror of that, so the biggest is on the left. Only the player's own
+// hand honours the setting -- the plays list and the history keep the natural
+// small-to-large order.
+function sortCards(cards, mode, dir) {
   const r = (c) => RANK_ORDER.indexOf(c.rank);
   const s = (c) => SUIT_ORDER.indexOf(c.suit);
-  return [...cards].sort((a, b) =>
+  const sorted = [...cards].sort((a, b) =>
     mode === "suit" ? (s(a) - s(b)) || (r(a) - r(b)) : (r(a) - r(b)) || (s(a) - s(b)));
+  return dir === "desc" ? sorted.reverse() : sorted;
 }
 // Scoring lives in gameLogic.js on the server; it arrives as payout.points so
 // the two can never disagree about what a hand is worth.
@@ -188,10 +215,12 @@ function PlayingCard({ card, selected, onClick, small, large, style }) {
     cursor: onClick ? "pointer" : "default"
   }, style) }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: rankSize, fontWeight: 800, color, lineHeight: 1 } }, card.rank, /* @__PURE__ */ React.createElement("div", { style: { fontSize: rankSize * 0.8, fontWeight: 700 } }, card.suit)), /* @__PURE__ */ React.createElement("div", { style: { flex: 1, display: "flex", alignItems: "center", justifyContent: "center" } }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: suitBig, color, fontWeight: 700 } }, card.suit)));
 }
-function Hand({ cards, selected, onToggle, sortMode, sortSignal }) {
+function Hand({ cards, selected, onToggle, sortMode, sortDir, sortSignal }) {
   const ref = useRef(null);
   const [w, setW] = useState(360);
-  const [order, setOrder] = useState(() => cards.map(cardKey));
+  // in the player's own order from the first frame -- after a refresh the hand
+  // used to come back in the server's order until a sort button was tapped
+  const [order, setOrder] = useState(() => sortCards(cards, sortMode, sortDir).map(cardKey));
   const [dragKey, setDragKey] = useState(null);
   const [dragX, setDragX] = useState(0);
   const dragInfo = useRef({ startClientX: 0, startLeft: 0, moved: false });
@@ -210,7 +239,7 @@ function Hand({ cards, selected, onToggle, sortMode, sortSignal }) {
     const isNewDeal = cards.length > prevCountRef.current; // hand only grows on a fresh deal
     prevCountRef.current = cards.length;
     if (isNewDeal) {
-      setOrder(sortCards(cards, sortMode).map(cardKey)); // apply the chosen sort to a new hand
+      setOrder(sortCards(cards, sortMode, sortDir).map(cardKey)); // apply the chosen sort to a new hand
       return;
     }
     // mid-round: cards only leave, so keep whatever arrangement the player made
@@ -221,9 +250,10 @@ function Hand({ cards, selected, onToggle, sortMode, sortSignal }) {
     });
   }, [cardsSignature]);
 
-  // an explicit tap on a sort button re-sorts immediately, discarding drags
+  // an explicit tap on a sort button (or a change of direction in settings)
+  // re-sorts immediately, discarding drags
   useEffect(() => {
-    if (sortSignal > 0) setOrder(sortCards(cards, sortMode).map(cardKey));
+    if (sortSignal > 0) setOrder(sortCards(cards, sortMode, sortDir).map(cardKey));
   }, [sortSignal]);
   const CARD_W = 68;
   const orderedCards = order.map((k) => cards.find((c) => cardKey(c) === k)).filter(Boolean);
@@ -484,7 +514,7 @@ function SettingsModal({ settings, setSettings, voiceOn, voiceCount, voiceError,
       }
     },
     voiceOn ? `เปิดอยู่ (${voiceCount})` : "เปิดไมค์"
-  )), voiceError && /* @__PURE__ */ React.createElement("div", { style: { color: NEG_COLOR, fontSize: 11, marginBottom: 6 } }, voiceError), /* @__PURE__ */ React.createElement("div", { style: { marginTop: 14 } }, /* @__PURE__ */ React.createElement("div", { style: { color: CREAM, fontSize: 14, marginBottom: 8 } }, "🎨 ธีมสี"), /* @__PURE__ */ React.createElement(ThemePicker, { current: settings.theme, onPick: (id) => setSettings({ theme: id }) })), /* @__PURE__ */ React.createElement("button", { style: merge(merge({}, styles.goldBtn), { marginTop: 16 }), onClick: onClose }, "ปิด")));
+  )), voiceError && /* @__PURE__ */ React.createElement("div", { style: { color: NEG_COLOR, fontSize: 11, marginBottom: 6 } }, voiceError), /* @__PURE__ */ React.createElement("div", { style: { marginTop: 14 } }, /* @__PURE__ */ React.createElement("div", { style: { color: CREAM, fontSize: 14, marginBottom: 8 } }, "🃏 การเรียงไพ่ในมือ"), /* @__PURE__ */ React.createElement(SortDirPicker, { current: settings.sortDir, onPick: (id) => setSettings({ sortDir: id }) })), /* @__PURE__ */ React.createElement("div", { style: { marginTop: 14 } }, /* @__PURE__ */ React.createElement("div", { style: { color: CREAM, fontSize: 14, marginBottom: 8 } }, "🎨 ธีมสี"), /* @__PURE__ */ React.createElement(ThemePicker, { current: settings.theme, onPick: (id) => setSettings({ theme: id }) })), /* @__PURE__ */ React.createElement("button", { style: merge(merge({}, styles.goldBtn), { marginTop: 16 }), onClick: onClose }, "ปิด")));
 }
 // The house rules, written where players can actually read them. Keep this in
 // step with gameLogic.js -- it is the only place a player learns, for example,
@@ -781,12 +811,14 @@ function App() {
   const [settings, setSettingsState] = useState(() => {
     try {
       const saved = JSON.parse(localStorage.getItem("big2settings") || "null");
-      return merge({ soundOn: true, soundVolume: 0.5, vibrateOn: true, vibrateLevel: 0.5, theme: "classic" }, saved || {});
+      return merge({ soundOn: true, soundVolume: 0.5, vibrateOn: true, vibrateLevel: 0.5, theme: "classic", sortDir: "asc" }, saved || {});
     } catch (e) {
-      return { soundOn: true, soundVolume: 0.5, vibrateOn: true, vibrateLevel: 0.5, theme: "classic" };
+      return { soundOn: true, soundVolume: 0.5, vibrateOn: true, vibrateLevel: 0.5, theme: "classic", sortDir: "asc" };
     }
   });
   function setSettings(patch) {
+    // a new direction has to show at once, like tapping a sort button does
+    if (patch && "sortDir" in patch) setSortSignal((n) => n + 1);
     setSettingsState((prev) => {
       const next = merge(merge({}, prev), patch);
       localStorage.setItem("big2settings", JSON.stringify(next));
@@ -1293,7 +1325,7 @@ function App() {
     flexShrink: 0,
     background: (state.passedThisTrick || []).includes(viewSeat) ? "#6b6b6b" : SEAT_COLORS[viewSeat],
     boxShadow: "0 0 6px rgba(255,255,255,.3)"
-  } }), /* @__PURE__ */ React.createElement("div", { style: { minWidth: 0 } }, /* @__PURE__ */ React.createElement("div", { style: { color: CREAM, fontSize: 15, fontWeight: 800, height: 19, display: "flex", alignItems: "center" } }, shownCount === 1 ? /* @__PURE__ */ React.createElement("span", { style: { color: "#FFD166" } }, "BIG2! \u{1F525}") : `${shownCount} ใบ`), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: MUTED, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } }, handLabel))), !watching && /* @__PURE__ */ React.createElement("div", { style: statWide }, /* @__PURE__ */ React.createElement("div", { style: { minWidth: 0 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 18, fontWeight: 900, color: state.cumulative[viewSeat] >= 0 ? POS_COLOR : NEG_COLOR } }, state.cumulative[viewSeat] >= 0 ? "+" : "", state.cumulative[viewSeat]), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: MUTED, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } }, "คะแนนสะสม"))), !watching && /* @__PURE__ */ React.createElement("button", { onClick: pauseGame, disabled: state.phase !== "playing" || !!state.paused, style: merge(merge({}, statTile), { opacity: state.phase === "playing" && !state.paused ? 1 : 0.4, fontFamily: "inherit" }) }, /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 20 } }, "⏸"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: GOLD, fontWeight: 700 } }, "พัก"))), /* @__PURE__ */ React.createElement("div", { style: statTile, onClick: openHistory }, /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 20 } }, "\u{1F4DC}"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: GOLD, fontWeight: 700 } }, "ประวัติ")))), !watching && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6, alignItems: "center", marginTop: 8, flexWrap: "wrap" } }, /* @__PURE__ */ React.createElement("button", { onClick: () => chooseSort("rank"), style: smallBtn(sortMode === "rank") }, "เรียงเลข"), /* @__PURE__ */ React.createElement("button", { onClick: () => chooseSort("suit"), style: smallBtn(sortMode === "suit") }, "เรียงดอก"), /* @__PURE__ */ React.createElement("button", { onClick: () => setShowRules(true), style: smallBtn(false) }, "📖 กติกา")),!watching && /* @__PURE__ */ React.createElement(Hand, { cards: myHand, selected, onToggle: toggleSelect, sortMode, sortSignal }), !watching && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, marginTop: 8 } }, /* @__PURE__ */ (!isMyTurn && state.lastPlayerSeat !== null ? /* @__PURE__ */ React.createElement("button", { style: merge(merge({}, styles.greenBtn), { flex: 1, borderColor: prePass ? GOLD : BORDER, color: prePass ? GOLD : CREAM, background: prePass ? "rgba(212,175,55,.15)" : "transparent" }), onClick: () => setPrePass((p) => !p) }, prePass ? "✓ ผ่านอัตโนมัติ" : "⏭ ผ่านล่วงหน้า") : /* @__PURE__ */ React.createElement("button", { style: merge(merge({}, styles.greenBtn), { flex: 1, opacity: canAct ? 1 : 0.5 }), disabled: !canAct, onClick: passTurn }, "ผ่าน")),/* @__PURE__ */ React.createElement("button", { style: merge(merge({}, styles.goldBtn), { flex: 1, opacity: canAct && selected.length ? 1 : 0.5 }), disabled: !canAct || selected.length === 0, onClick: () => playSelected() }, "ลงไพ่ (", selected.length, ")")), watching && /* @__PURE__ */ React.createElement("div", { style: { marginTop: 10, padding: "10px 12px", borderRadius: 10, border: `1px solid ${GOLD}`, background: "rgba(212,175,55,.12)", textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { color: GOLD, fontSize: 13, fontWeight: 700 } }, "\u{1F441} โหมดผู้ชม"), /* @__PURE__ */ React.createElement("div", { style: { color: MUTED, fontSize: 11, marginTop: 2 } }, "ดูอย่างเดียว — ไม่เห็นไพ่ในมือใคร และแชทไม่ได้"), /* @__PURE__ */ React.createElement("button", { onClick: stopWatching, style: merge(merge({}, styles.greenBtn), { marginTop: 8 }) }, "เลิกดู กลับหน้าแรก")), !watching && /* @__PURE__ */ React.createElement(ChatPanel, { chat, chatInput, setChatInput, sendChat, mySeat: state.mySeat })), state.paused && /* @__PURE__ */ React.createElement("div", { style: styles.modalOverlay }, /* @__PURE__ */ React.createElement("div", { style: styles.modalCard }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 40, textAlign: "center" } }, "⏸"), /* @__PURE__ */ React.createElement("div", { style: { color: GOLD, fontWeight: 700, fontSize: 16, textAlign: "center", marginTop: 4 } }, "พักเกม"), /* @__PURE__ */ React.createElement("div", { style: { color: CREAM, fontSize: 13, textAlign: "center", marginTop: 8 } }, state.paused.by, " กดพัก"), /* @__PURE__ */ React.createElement("div", { style: { color: FAINT, fontSize: 12, textAlign: "center", marginTop: 4 } }, "เล่นต่อเองใน ", pauseLeft), /* @__PURE__ */ React.createElement("button", { style: merge(merge({}, styles.goldBtn), { marginTop: 16 }), onClick: resumeGame }, "เล่นต่อ"))), state.phase === "finished" &&/* @__PURE__ */ React.createElement("div", { style: styles.modalOverlay }, /* @__PURE__ */ React.createElement("div", { style: styles.modalCard }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 40, textAlign: "center" } }, "\u{1F389}"), /* @__PURE__ */ React.createElement("div", { style: { color: GOLD, fontWeight: 700, fontSize: 16, textAlign: "center", marginTop: 4 } }, state.players[state.finished[0]] || `บอท ${state.finished[0] + 1}`, " ชนะรอบที่ ", state.round, "!"), /* @__PURE__ */ React.createElement("div", { style: { marginTop: 16 } }, [viewSeat, ...[0, 1, 2, 3].filter((s) => s !== viewSeat)].map((s) => {
+  } }), /* @__PURE__ */ React.createElement("div", { style: { minWidth: 0 } }, /* @__PURE__ */ React.createElement("div", { style: { color: CREAM, fontSize: 15, fontWeight: 800, height: 19, display: "flex", alignItems: "center" } }, shownCount === 1 ? /* @__PURE__ */ React.createElement("span", { style: { color: "#FFD166" } }, "BIG2! \u{1F525}") : `${shownCount} ใบ`), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: MUTED, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } }, handLabel))), !watching && /* @__PURE__ */ React.createElement("div", { style: statWide }, /* @__PURE__ */ React.createElement("div", { style: { minWidth: 0 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 18, fontWeight: 900, color: state.cumulative[viewSeat] >= 0 ? POS_COLOR : NEG_COLOR } }, state.cumulative[viewSeat] >= 0 ? "+" : "", state.cumulative[viewSeat]), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: MUTED, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } }, "คะแนนสะสม"))), !watching && /* @__PURE__ */ React.createElement("button", { onClick: pauseGame, disabled: state.phase !== "playing" || !!state.paused, style: merge(merge({}, statTile), { opacity: state.phase === "playing" && !state.paused ? 1 : 0.4, fontFamily: "inherit" }) }, /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 20 } }, "⏸"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: GOLD, fontWeight: 700 } }, "พัก"))), /* @__PURE__ */ React.createElement("div", { style: statTile, onClick: openHistory }, /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 20 } }, "\u{1F4DC}"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: GOLD, fontWeight: 700 } }, "ประวัติ")))), !watching && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6, alignItems: "center", marginTop: 8, flexWrap: "wrap" } }, /* @__PURE__ */ React.createElement("button", { onClick: () => chooseSort("rank"), style: smallBtn(sortMode === "rank") }, "เรียงเลข"), /* @__PURE__ */ React.createElement("button", { onClick: () => chooseSort("suit"), style: smallBtn(sortMode === "suit") }, "เรียงดอก")),!watching && /* @__PURE__ */ React.createElement(Hand, { cards: myHand, selected, onToggle: toggleSelect, sortMode, sortDir: settings.sortDir === "desc" ? "desc" : "asc", sortSignal }), !watching && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, marginTop: 8 } }, /* @__PURE__ */ (!isMyTurn && state.lastPlayerSeat !== null ? /* @__PURE__ */ React.createElement("button", { style: merge(merge({}, styles.greenBtn), { flex: 1, borderColor: prePass ? GOLD : BORDER, color: prePass ? GOLD : CREAM, background: prePass ? "rgba(212,175,55,.15)" : "transparent" }), onClick: () => setPrePass((p) => !p) }, prePass ? "✓ ผ่านอัตโนมัติ" : "⏭ ผ่านล่วงหน้า") : /* @__PURE__ */ React.createElement("button", { style: merge(merge({}, styles.greenBtn), { flex: 1, opacity: canAct ? 1 : 0.5 }), disabled: !canAct, onClick: passTurn }, "ผ่าน")),/* @__PURE__ */ React.createElement("button", { style: merge(merge({}, styles.goldBtn), { flex: 1, opacity: canAct && selected.length ? 1 : 0.5 }), disabled: !canAct || selected.length === 0, onClick: () => playSelected() }, "ลงไพ่ (", selected.length, ")")), watching && /* @__PURE__ */ React.createElement("div", { style: { marginTop: 10, padding: "10px 12px", borderRadius: 10, border: `1px solid ${GOLD}`, background: "rgba(212,175,55,.12)", textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { color: GOLD, fontSize: 13, fontWeight: 700 } }, "\u{1F441} โหมดผู้ชม"), /* @__PURE__ */ React.createElement("div", { style: { color: MUTED, fontSize: 11, marginTop: 2 } }, "ดูอย่างเดียว — ไม่เห็นไพ่ในมือใคร และแชทไม่ได้"), /* @__PURE__ */ React.createElement("button", { onClick: stopWatching, style: merge(merge({}, styles.greenBtn), { marginTop: 8 }) }, "เลิกดู กลับหน้าแรก")), !watching && /* @__PURE__ */ React.createElement(ChatPanel, { chat, chatInput, setChatInput, sendChat, mySeat: state.mySeat })), state.paused && /* @__PURE__ */ React.createElement("div", { style: styles.modalOverlay }, /* @__PURE__ */ React.createElement("div", { style: styles.modalCard }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 40, textAlign: "center" } }, "⏸"), /* @__PURE__ */ React.createElement("div", { style: { color: GOLD, fontWeight: 700, fontSize: 16, textAlign: "center", marginTop: 4 } }, "พักเกม"), /* @__PURE__ */ React.createElement("div", { style: { color: CREAM, fontSize: 13, textAlign: "center", marginTop: 8 } }, state.paused.by, " กดพัก"), /* @__PURE__ */ React.createElement("div", { style: { color: FAINT, fontSize: 12, textAlign: "center", marginTop: 4 } }, "เล่นต่อเองใน ", pauseLeft), /* @__PURE__ */ React.createElement("button", { style: merge(merge({}, styles.goldBtn), { marginTop: 16 }), onClick: resumeGame }, "เล่นต่อ"))), state.phase === "finished" &&/* @__PURE__ */ React.createElement("div", { style: styles.modalOverlay }, /* @__PURE__ */ React.createElement("div", { style: styles.modalCard }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 40, textAlign: "center" } }, "\u{1F389}"), /* @__PURE__ */ React.createElement("div", { style: { color: GOLD, fontWeight: 700, fontSize: 16, textAlign: "center", marginTop: 4 } }, state.players[state.finished[0]] || `บอท ${state.finished[0] + 1}`, " ชนะรอบที่ ", state.round, "!"), /* @__PURE__ */ React.createElement("div", { style: { marginTop: 16 } }, [viewSeat, ...[0, 1, 2, 3].filter((s) => s !== viewSeat)].map((s) => {
     const delta = state.payout ? state.payout.net[s] : 0;
     const hand = state.allHands ? state.allHands[s] : [];
     const pts = state.payout && state.payout.points ? state.payout.points[s] : 0;
