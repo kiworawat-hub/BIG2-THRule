@@ -7,7 +7,7 @@ const { useState, useEffect, useRef, useCallback } = React;
 
 // Shown in the lobby so a player can say which version they are looking at.
 // Keep in step with package.json and CHANGELOG.md.
-const APP_VERSION = "1.3.2";
+const APP_VERSION = "1.4.0";
 
 // A friend opening big2unity.onrender.com/?room=KQ7M lands with the code
 // already filled in, so joining is one tap instead of typing it correctly.
@@ -24,9 +24,121 @@ const merge = (...objs) => Object.assign({}, ...objs);
 const GOLD = "#d4af37";   // headings, primary buttons
 const CREAM = "#f4e9d8";  // body text
 const MUTED = "#8a9a8e";  // secondary text
-const FAINT = "#5a7a9f";  // placeholder / disabled text
-const PANEL = "#0f1f3a";  // card and modal background
-const BORDER = "#2f5f8f"; // panel borders
+const FAINT = "var(--faint, #5a7a9f)";  // placeholder / disabled text
+const PANEL = "var(--panel, #0f1f3a)";  // card and modal background
+const BORDER = "var(--border, #2f5f8f)"; // panel borders
+
+// --- themes -----------------------------------------------------------------
+// Everything that is table, background or panel colour is read from CSS
+// variables (var(--felt1) and friends), so a theme is just a set of values and
+// switching one repaints the whole page with no reload. Gold accents, cream text
+// and the card faces are the same in every theme: the cards must read the same
+// whatever is behind them.
+//
+// The new themes are all darker and calmer than the original on purpose --
+// low brightness and low saturation are what make a screen bearable for hours.
+// Backdrops are near-black rather than black (pure black against white cards is
+// its own kind of glare), and the felt is held well below the cards in
+// brightness so the cards are what the eye lands on. The original ("classic") is
+// kept exactly as it was, as the first choice.
+const THEMES = [
+  { id: "classic", name: "คลาสสิก", note: "น้ำเงิน + เขียวสด (เดิม)", vars: {
+    bg1: "#1e4a7a", bg2: "#0d2848", bg3: "#061428",
+    felt1: "#2e9b5f", felt2: "#1c7a45", felt3: "#0f4d2c",
+    rail: "#2b2b2e", "rail-inner": "#1a1a1c",
+    panel: "#0f1f3a", card: "rgba(10,20,40,0.6)", border: "#2f5f8f", border2: "#3a5a7f", input: "#132747",
+    seat1: "rgba(20,32,54,.92)", seat2: "rgba(14,24,44,.92)", faint: "#5a7a9f",
+  } },
+  { id: "pine", name: "เขียวสนเข้ม", note: "โต๊ะคาสิโน นุ่มตา", vars: {
+    bg1: "#16202b", bg2: "#0e1620", bg3: "#080d13",
+    felt1: "#2a6b4a", felt2: "#1f5539", felt3: "#133826",
+    rail: "#232624", "rail-inner": "#141614",
+    panel: "#101a22", card: "rgba(10,18,26,0.6)", border: "#2c4a45", border2: "#37574f", input: "#0f1c22",
+    seat1: "rgba(18,30,36,.92)", seat2: "rgba(12,22,28,.92)", faint: "#62807a",
+  } },
+  { id: "teal", name: "ทีลกลางคืน", note: "เย็น สงบ", vars: {
+    bg1: "#14202b", bg2: "#0d1620", bg3: "#070c12",
+    felt1: "#2b6f6b", felt2: "#1f5753", felt3: "#133836",
+    rail: "#22292b", "rail-inner": "#131819",
+    panel: "#0f1c26", card: "rgba(10,20,30,0.6)", border: "#2b5560", border2: "#366571", input: "#0f1e2a",
+    seat1: "rgba(16,32,42,.92)", seat2: "rgba(11,24,33,.92)", faint: "#5f8590",
+  } },
+  { id: "burgundy", name: "ไวน์แดง", note: "กำมะหยี่ อบอุ่น", vars: {
+    bg1: "#241618", bg2: "#170e10", bg3: "#0c0709",
+    felt1: "#6a2b37", felt2: "#521f2a", felt3: "#37141c",
+    rail: "#2e1f1a", "rail-inner": "#1a110e",
+    panel: "#1c1214", card: "rgba(28,16,18,0.6)", border: "#5a3038", border2: "#6a3d46", input: "#24161a",
+    seat1: "rgba(38,22,26,.92)", seat2: "rgba(28,16,20,.92)", faint: "#8a6a70",
+  } },
+  { id: "twilight", name: "ม่วงยามค่ำ", note: "นุ่ม ลดแสงจ้า", vars: {
+    bg1: "#1c1830", bg2: "#120f22", bg3: "#0a0814",
+    felt1: "#4b3f7c", felt2: "#3a3162", felt3: "#241d40",
+    rail: "#26232f", "rail-inner": "#16141c",
+    panel: "#17132a", card: "rgba(20,16,38,0.6)", border: "#47407a", border2: "#554d8c", input: "#1c1734",
+    seat1: "rgba(28,24,52,.92)", seat2: "rgba(20,17,40,.92)", faint: "#7a74a8",
+  } },
+  { id: "graphite", name: "ถ่านหิน", note: "เรียบ เข้ม ประหยัดจอ OLED", vars: {
+    bg1: "#1a1c1f", bg2: "#101214", bg3: "#08090a",
+    felt1: "#4c5660", felt2: "#3b444c", felt3: "#272d33",
+    rail: "#2a2c2f", "rail-inner": "#17181a",
+    panel: "#14171a", card: "rgba(18,20,23,0.6)", border: "#3a4148", border2: "#48505a", input: "#191c20",
+    seat1: "rgba(28,31,35,.92)", seat2: "rgba(20,22,26,.92)", faint: "#6e7780",
+  } },
+];
+function themeById(id) {
+  return THEMES.find((t) => t.id === id) || THEMES[0];
+}
+// Paints the page with a theme. Also colours the page BEHIND the app (the
+// overscroll and notch areas) and the browser's own bar, which would otherwise
+// stay the original navy whatever the table looks like.
+function applyTheme(id) {
+  const t = themeById(id);
+  const root = document.documentElement;
+  Object.keys(t.vars).forEach((k) => root.style.setProperty("--" + k, t.vars[k]));
+  root.style.backgroundColor = t.vars.bg3;
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute("content", t.vars.bg2);
+  return t.id;
+}
+// the saved choice is applied before the first paint, so there is no flash of
+// the original colours on the way to a different theme
+applyTheme((() => {
+  try {
+    const saved = JSON.parse(localStorage.getItem("big2settings") || "null");
+    return saved && saved.theme;
+  } catch (e) { return "classic"; }
+})());
+// one small picture of a theme: its backdrop with its table on it
+function ThemePicker({ current, onPick }) {
+  const active = themeById(current).id;
+  return /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 } }, THEMES.map((t) => {
+    const on = t.id === active, v = t.vars;
+    return /* @__PURE__ */ React.createElement("button", { key: t.id, onClick: () => onPick(t.id), "aria-pressed": on, style: {
+      padding: 6,
+      borderRadius: 10,
+      cursor: "pointer",
+      textAlign: "left",
+      fontFamily: "inherit",
+      color: CREAM,
+      background: "rgba(255,255,255,.04)",
+      border: on ? `2px solid ${GOLD}` : "1px solid rgba(255,255,255,.14)"
+    } }, /* @__PURE__ */ React.createElement("div", { style: {
+      position: "relative",
+      height: 44,
+      borderRadius: 7,
+      background: `radial-gradient(ellipse at center, ${v.bg1} 0%, ${v.bg2} 70%, ${v.bg3} 100%)`
+    } }, /* @__PURE__ */ React.createElement("div", { style: {
+      position: "absolute",
+      left: "14%",
+      right: "14%",
+      top: "16%",
+      bottom: "16%",
+      borderRadius: "50%",
+      border: `3px solid ${v.rail}`,
+      background: `radial-gradient(ellipse at center, ${v.felt1} 0%, ${v.felt2} 60%, ${v.felt3} 100%)`
+    } })), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 700, marginTop: 5 } }, t.name, on && " ✓"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: MUTED, lineHeight: 1.3 } }, t.note));
+  }));
+}
 
 // Classic four-colour poker deck, at Pok's request: clubs green, diamonds
 // blue, hearts red, spades black. This is the one place red and green sit
@@ -258,7 +370,7 @@ function Table({ mySeat, players, handCounts, turn, trickPile, finished, passedT
       height: 76,
       boxSizing: "border-box",
       overflow: "hidden",
-      background: "linear-gradient(180deg, rgba(20,32,54,.92), rgba(14,24,44,.92))",
+      background: "linear-gradient(180deg, var(--seat1, rgba(20,32,54,.92)), var(--seat2, rgba(14,24,44,.92)))",
       border: `2px solid ${active ? "transparent" : color}`,
       boxShadow: active ? "none" : "0 2px 6px rgba(0,0,0,.3)",
       display: "flex",
@@ -283,9 +395,9 @@ function Table({ mySeat, players, handCounts, turn, trickPile, finished, passedT
     flex: 1,
     height: 190,
     borderRadius: "50%",
-    background: "radial-gradient(ellipse at center, #2e9b5f 0%, #1c7a45 60%, #0f4d2c 100%)",
-    border: "9px solid #2b2b2e",
-    boxShadow: "inset 0 0 0 5px #1a1a1c, inset 0 0 28px rgba(0,0,0,.5), 0 6px 16px rgba(0,0,0,.4)",
+    background: "radial-gradient(ellipse at center, var(--felt1, #2e9b5f) 0%, var(--felt2, #1c7a45) 60%, var(--felt3, #0f4d2c) 100%)",
+    border: "9px solid var(--rail, #2b2b2e)",
+    boxShadow: "inset 0 0 0 5px var(--rail-inner, #1a1a1c), inset 0 0 28px rgba(0,0,0,.5), 0 6px 16px rgba(0,0,0,.4)",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
@@ -293,17 +405,17 @@ function Table({ mySeat, players, handCounts, turn, trickPile, finished, passedT
   } }, /* @__PURE__ */ React.createElement(TrickPile, { trickPile, feltWidth }), onOpenPlays && /* @__PURE__ */ React.createElement("div", { style: { position: "absolute", bottom: 12, left: "50%", transform: "translateX(-50%)", fontSize: 13, opacity: 0.5, pointerEvents: "none" } }, "📋")), /* @__PURE__ */ React.createElement(Seat, { seat: bySeat.right })), showAllSeats && /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "center", marginTop: 10 } }, /* @__PURE__ */ React.createElement(Seat, { seat: mySeat })));
 }
 const styles = {
-  bg: { minHeight: "100vh", width: "100%", background: "radial-gradient(ellipse at center, #1e4a7a 0%, #0d2848 70%, #061428 100%)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 },
-  card: { background: "rgba(10,20,40,0.6)", border: "1px solid #2f5f8f", borderRadius: 16, padding: "28px 24px", width: "100%", maxWidth: 380, boxShadow: "0 8px 32px rgba(0,0,0,.5)" },
-  input: { width: "100%", padding: "12px 14px", borderRadius: 8, border: "1px solid #3a5a7f", background: PANEL, color: CREAM, fontSize: 15, marginBottom: 10, boxSizing: "border-box" },
+  bg: { minHeight: "100vh", width: "100%", background: "radial-gradient(ellipse at center, var(--bg1, #1e4a7a) 0%, var(--bg2, #0d2848) 70%, var(--bg3, #061428) 100%)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 },
+  card: { background: "var(--card, rgba(10,20,40,0.6))", border: "1px solid var(--border, #2f5f8f)", borderRadius: 16, padding: "28px 24px", width: "100%", maxWidth: 380, boxShadow: "0 8px 32px rgba(0,0,0,.5)" },
+  input: { width: "100%", padding: "12px 14px", borderRadius: 8, border: "1px solid var(--border2, #3a5a7f)", background: PANEL, color: CREAM, fontSize: 15, marginBottom: 10, boxSizing: "border-box" },
   goldBtn: { width: "100%", padding: "12px 14px", borderRadius: 8, border: "none", background: "linear-gradient(180deg,#e6c565,#c9a03e)", color: "#1a1a1a", fontWeight: 700, fontSize: 15, marginBottom: 6 },
-  greenBtn: { width: "100%", padding: "12px 14px", borderRadius: 8, border: "1px solid #3a5a7f", background: "transparent", color: CREAM, fontWeight: 600, fontSize: 15 },
+  greenBtn: { width: "100%", padding: "12px 14px", borderRadius: 8, border: "1px solid var(--border2, #3a5a7f)", background: "transparent", color: CREAM, fontWeight: 600, fontSize: 15 },
   wrap: { width: "100%", maxWidth: 720 },
   statBox: { flex: 1, display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", height: 56, boxSizing: "border-box", borderRadius: 14, background: "linear-gradient(180deg, rgba(212,175,55,.14), rgba(212,175,55,.04))", border: "1.5px solid #d4af37" },
   matchBadge: { display: "inline-flex", alignItems: "center", gap: 4, padding: "5px 12px", borderRadius: 20, border: "1px solid #8a9a8e", color: "#c9d4cb", fontSize: 11, fontWeight: 600, cursor: "pointer", background: "rgba(255,255,255,.05)" },
   matchBadgeActive: { display: "inline-flex", alignItems: "center", gap: 4, padding: "5px 12px", borderRadius: 20, border: "1px solid #ff9800", color: "#ff9800", fontSize: 12, fontWeight: 800, background: "rgba(255,152,0,.12)", boxShadow: "0 0 8px rgba(255,152,0,.3)" },
   modalOverlay: { position: "fixed", inset: 0, background: "rgba(0,0,0,.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1e3, padding: 16 },
-  modalCard: { background: PANEL, border: "1px solid #2f5f8f", borderRadius: 16, padding: "22px 18px", width: "100%", maxWidth: 380, maxHeight: "80vh", overflowY: "auto", boxShadow: "0 8px 32px rgba(0,0,0,.5)" }
+  modalCard: { background: PANEL, border: "1px solid var(--border, #2f5f8f)", borderRadius: 16, padding: "22px 18px", width: "100%", maxWidth: 380, maxHeight: "80vh", overflowY: "auto", boxShadow: "0 8px 32px rgba(0,0,0,.5)" }
 };
 // The two small square buttons at the end of the stats row (pause, history):
 // the same size, so the row reads as two boxes and two buttons.
@@ -372,7 +484,7 @@ function SettingsModal({ settings, setSettings, voiceOn, voiceCount, voiceError,
       }
     },
     voiceOn ? `เปิดอยู่ (${voiceCount})` : "เปิดไมค์"
-  )), voiceError && /* @__PURE__ */ React.createElement("div", { style: { color: NEG_COLOR, fontSize: 11, marginBottom: 6 } }, voiceError), /* @__PURE__ */ React.createElement("button", { style: merge(merge({}, styles.goldBtn), { marginTop: 16 }), onClick: onClose }, "ปิด")));
+  )), voiceError && /* @__PURE__ */ React.createElement("div", { style: { color: NEG_COLOR, fontSize: 11, marginBottom: 6 } }, voiceError), /* @__PURE__ */ React.createElement("div", { style: { marginTop: 14 } }, /* @__PURE__ */ React.createElement("div", { style: { color: CREAM, fontSize: 14, marginBottom: 8 } }, "🎨 ธีมสี"), /* @__PURE__ */ React.createElement(ThemePicker, { current: settings.theme, onPick: (id) => setSettings({ theme: id }) })), /* @__PURE__ */ React.createElement("button", { style: merge(merge({}, styles.goldBtn), { marginTop: 16 }), onClick: onClose }, "ปิด")));
 }
 // The house rules, written where players can actually read them. Keep this in
 // step with gameLogic.js -- it is the only place a player learns, for example,
@@ -489,7 +601,7 @@ function HistoryModal({ roundHistory, loading, players, mySeat, cumulative, onCl
     const idx = row.players.indexOf(colName);
     return idx === -1 ? null : row.net[idx];
   }
-  return /* @__PURE__ */ React.createElement("div", { style: styles.modalOverlay, onClick: onClose }, /* @__PURE__ */ React.createElement("div", { style: styles.modalCard, onClick: (e) => e.stopPropagation() }, /* @__PURE__ */ React.createElement("h2", { style: { color: GOLD, textAlign: "center", marginBottom: 12 } }, "ประวัติคะแนน"), loading ? /* @__PURE__ */ React.createElement("p", { style: { color: MUTED, textAlign: "center" } }, "กำลังโหลด...") : !roundHistory || roundHistory.length === 0 ? /* @__PURE__ */ React.createElement("p", { style: { color: MUTED, textAlign: "center" } }, "ยังไม่มีรอบที่จบครับ") : /* @__PURE__ */ React.createElement("div", { style: { overflowX: "auto" } }, /* @__PURE__ */ React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: 12 } }, /* @__PURE__ */ React.createElement("thead", null, /* @__PURE__ */ React.createElement("tr", null, /* @__PURE__ */ React.createElement("th", { style: { color: MUTED, padding: "4px 8px", textAlign: "center", borderBottom: "1px solid #2f5f8f" } }, "รอบ"), [0, 1, 2, 3].map((s) => /* @__PURE__ */ React.createElement("th", { key: s, style: { color: MUTED, padding: "4px 8px", textAlign: "center", borderBottom: "1px solid #2f5f8f", whiteSpace: "nowrap" } }, s === mySeat ? "คุณ" : players[s] || `บอท ${s + 1}`)), /* @__PURE__ */ React.createElement("th", { style: { color: MUTED, padding: "4px 8px", textAlign: "center", borderBottom: "1px solid #2f5f8f" } }))), /* @__PURE__ */ React.createElement("tbody", null, roundHistory.map((r) => /* @__PURE__ */ React.createElement("tr", { key: r.round }, /* @__PURE__ */ React.createElement("td", { style: { color: CREAM, padding: "4px 8px", textAlign: "center", borderBottom: "1px solid rgba(255,255,255,.05)" } }, r.round), [0, 1, 2, 3].map((s) => {
+  return /* @__PURE__ */ React.createElement("div", { style: styles.modalOverlay, onClick: onClose }, /* @__PURE__ */ React.createElement("div", { style: styles.modalCard, onClick: (e) => e.stopPropagation() }, /* @__PURE__ */ React.createElement("h2", { style: { color: GOLD, textAlign: "center", marginBottom: 12 } }, "ประวัติคะแนน"), loading ? /* @__PURE__ */ React.createElement("p", { style: { color: MUTED, textAlign: "center" } }, "กำลังโหลด...") : !roundHistory || roundHistory.length === 0 ? /* @__PURE__ */ React.createElement("p", { style: { color: MUTED, textAlign: "center" } }, "ยังไม่มีรอบที่จบครับ") : /* @__PURE__ */ React.createElement("div", { style: { overflowX: "auto" } }, /* @__PURE__ */ React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: 12 } }, /* @__PURE__ */ React.createElement("thead", null, /* @__PURE__ */ React.createElement("tr", null, /* @__PURE__ */ React.createElement("th", { style: { color: MUTED, padding: "4px 8px", textAlign: "center", borderBottom: "1px solid var(--border, #2f5f8f)" } }, "รอบ"), [0, 1, 2, 3].map((s) => /* @__PURE__ */ React.createElement("th", { key: s, style: { color: MUTED, padding: "4px 8px", textAlign: "center", borderBottom: "1px solid var(--border, #2f5f8f)", whiteSpace: "nowrap" } }, s === mySeat ? "คุณ" : players[s] || `บอท ${s + 1}`)), /* @__PURE__ */ React.createElement("th", { style: { color: MUTED, padding: "4px 8px", textAlign: "center", borderBottom: "1px solid var(--border, #2f5f8f)" } }))), /* @__PURE__ */ React.createElement("tbody", null, roundHistory.map((r) => /* @__PURE__ */ React.createElement("tr", { key: r.round }, /* @__PURE__ */ React.createElement("td", { style: { color: CREAM, padding: "4px 8px", textAlign: "center", borderBottom: "1px solid rgba(255,255,255,.05)" } }, r.round), [0, 1, 2, 3].map((s) => {
     const v = valueFor(r, s);
     return /* @__PURE__ */ React.createElement("td", { key: s, style: { padding: "4px 8px", textAlign: "center", borderBottom: "1px solid rgba(255,255,255,.05)", color: v === null ? FAINT : v >= 0 ? POS_COLOR : NEG_COLOR } }, v === null ? "—" : `${v >= 0 ? "+" : ""}${v}`);
   }), /* @__PURE__ */ React.createElement("td", { style: { padding: "4px 6px", textAlign: "center", borderBottom: "1px solid rgba(255,255,255,.05)" } }, /* @__PURE__ */ React.createElement("button", { onClick: () => setViewRound(r), style: { padding: "3px 8px", borderRadius: 6, border: "1px solid #d4af37", background: "transparent", color: GOLD, fontSize: 10, cursor: "pointer", whiteSpace: "nowrap" } }, "สรุป")))), /* @__PURE__ */ React.createElement("tr", null, /* @__PURE__ */ React.createElement("td", { style: { color: GOLD, fontWeight: 700, padding: "4px 8px", textAlign: "center" } }, "รวม"), cumulative.map((v, s) => /* @__PURE__ */ React.createElement("td", { key: s, style: { color: v >= 0 ? POS_COLOR : NEG_COLOR, fontWeight: 700, padding: "4px 8px", textAlign: "center" } }, v >= 0 ? "+" : "", v)), /* @__PURE__ */ React.createElement("td", null))))), /* @__PURE__ */ React.createElement("button", { style: merge(merge({}, styles.goldBtn), { marginTop: 16 }), onClick: onClose }, "ปิด")), viewRound && /* @__PURE__ */ React.createElement("div", { style: merge(merge({}, styles.modalOverlay), { zIndex: 1200 }), onClick: (e) => {
@@ -535,7 +647,7 @@ function ChatPanel({ chat, chatInput, setChatInput, sendChat, mySeat }) {
     right: 0,
     zIndex: 200,
     background: PANEL,
-    border: "1px solid #2f5f8f",
+    border: "1px solid var(--border, #2f5f8f)",
     borderRadius: 12,
     overflow: "hidden",
     display: "flex",
@@ -559,7 +671,7 @@ function ChatPanel({ chat, chatInput, setChatInput, sendChat, mySeat }) {
       wordBreak: "break-word",
       textAlign: "left"
     } }, m.text));
-  })), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6, padding: 6, borderTop: "1px solid #2f5f8f" } }, /* @__PURE__ */ React.createElement(
+  })), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6, padding: 6, borderTop: "1px solid var(--border, #2f5f8f)" } }, /* @__PURE__ */ React.createElement(
     "input",
     {
       autoFocus: true,
@@ -570,7 +682,7 @@ function ChatPanel({ chat, chatInput, setChatInput, sendChat, mySeat }) {
       },
       placeholder: "พิมพ์ข้อความ...",
       maxLength: 200,
-      style: { flex: 1, padding: "7px 10px", borderRadius: 8, border: "1px solid #3a5a7f", background: "#132747", color: CREAM, fontSize: 12 }
+      style: { flex: 1, padding: "7px 10px", borderRadius: 8, border: "1px solid var(--border2, #3a5a7f)", background: "var(--input, #132747)", color: CREAM, fontSize: 12 }
     }
   ), /* @__PURE__ */ React.createElement("button", { onClick: sendChat, style: { padding: "7px 12px", borderRadius: 8, border: "none", background: GOLD, color: "#1a1a1a", fontWeight: 700, fontSize: 12 } }, "ส่ง"))), /* @__PURE__ */ React.createElement(
     "div",
@@ -583,7 +695,7 @@ function ChatPanel({ chat, chatInput, setChatInput, sendChat, mySeat }) {
         padding: "8px 12px",
         borderRadius: 10,
         background: PANEL,
-        border: "1px solid #2f5f8f",
+        border: "1px solid var(--border, #2f5f8f)",
         cursor: "pointer"
       }
     },
@@ -669,9 +781,9 @@ function App() {
   const [settings, setSettingsState] = useState(() => {
     try {
       const saved = JSON.parse(localStorage.getItem("big2settings") || "null");
-      return merge({ soundOn: true, soundVolume: 0.5, vibrateOn: true, vibrateLevel: 0.5 }, saved || {});
+      return merge({ soundOn: true, soundVolume: 0.5, vibrateOn: true, vibrateLevel: 0.5, theme: "classic" }, saved || {});
     } catch (e) {
-      return { soundOn: true, soundVolume: 0.5, vibrateOn: true, vibrateLevel: 0.5 };
+      return { soundOn: true, soundVolume: 0.5, vibrateOn: true, vibrateLevel: 0.5, theme: "classic" };
     }
   });
   function setSettings(patch) {
@@ -681,6 +793,10 @@ function App() {
       return next;
     });
   }
+  // a theme is a device setting like the volume: each player picks their own
+  useEffect(() => {
+    applyTheme(settings.theme);
+  }, [settings.theme]);
   const [voiceOn, setVoiceOn] = useState(false);
   const [voiceCount, setVoiceCount] = useState(0);
   const [voiceError, setVoiceError] = useState("");
