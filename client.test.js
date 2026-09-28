@@ -124,7 +124,7 @@ const byLabel = (s) => buttons().find((b) => (b.textContent || "").includes(s));
   ok("no runtime errors while rendering the table", errors.length === 0);
   ok("the pause button is on screen", !!byLabel("พัก"));
   ok("the pause button is ENABLED during a round", byLabel("พัก") && !byLabel("พัก").disabled);
-  ok("the rules button is on screen during play", !!byLabel("กติกา"));
+  ok("there is no rules button in the game itself any more", !byLabel("กติกา") && !text().includes("📖"));
   ok("both sort buttons are on screen", !!byLabel("เรียงเลข") && !!byLabel("เรียงดอก"));
 
   console.log("\npressing pause actually emits");
@@ -146,13 +146,19 @@ const byLabel = (s) => buttons().find((b) => (b.textContent || "").includes(s));
   ok("clicking resume emits resumeGame", sent.some((m) => m.ev === "resumeGame"));
 
   console.log("\nthe rules screen");
-  serverSays("state", playingState());
+  // the rules are read from the waiting room, before the game starts
+  serverSays("state", playingState({ phase: "waiting", myHand: [] }));
   await settle();
-  if (byLabel("กติกา")) byLabel("กติกา").click();
+  ok("the waiting room offers the rules", !!byLabel("ดูกติกา"));
+  if (byLabel("ดูกติกา")) byLabel("ดูกติกา").click();
   await settle();
   ok("rules open", text().includes("กติกา BIG2"));
   ok("they mention the flush rule", text().includes("เทียบทีละใบ"));
   ok("they mention J-Q-K-A-2", text().includes("J-Q-K-A-2"));
+  if (byLabel("ปิด")) byLabel("ปิด").click();
+  await settle();
+  serverSays("state", playingState());
+  await settle();
 
   console.log("\nsnap-pass appears only when waiting for your turn");
   serverSays("state", playingState({ turn: 1 })); // not my turn, live trick
@@ -436,13 +442,17 @@ const byLabel = (s) => buttons().find((b) => (b.textContent || "").includes(s));
   await settle();
 
   console.log("\nthe rules screen covers the new behaviour");
-  if (byLabel("กติกา")) byLabel("กติกา").click();
+  serverSays("state", playingState({ phase: "waiting", myHand: [] }));
+  await settle();
+  if (byLabel("ดูกติกา")) byLabel("ดูกติกา").click();
   await settle();
   ok("the last-card rule says it is the NEXT SEAT that counts", text().includes("ดูที่นั่งถัดไปจริงๆ"));
   ok("there is an auto-pass section", text().includes("ผ่านให้อัตโนมัติ"));
   ok("and a reseat section", text().includes("ถามจากขาสุดท้ายก่อน"));
   ok("and the round-plays list", text().includes("แตะที่โต๊ะสีเขียว"));
   if (byLabel("ปิด")) byLabel("ปิด").click();
+  await settle();
+  serverSays("state", playingState());
   await settle();
 
   console.log("\nwatching: all four players are shown the same way");
@@ -663,6 +673,87 @@ const byLabel = (s) => buttons().find((b) => (b.textContent || "").includes(s));
 
   serverSays("state", playingState());
   await settle();
+
+  console.log("\nsetting: which end of the hand the small cards sit at");
+  // a card's text is rank + small suit + big suit ("3♣♣"), so drop the last glyph
+  const handOrder = () => cardLabels().map((t) => t.slice(0, -1));
+  const dirBtn = (name) => buttons().find((b) => (b.textContent || "").includes(name) && b.getAttribute("role") === "radio");
+  const scrambled = [cc("8", "♥"), cc("2", "♠"), cc("3", "♣"), cc("K", "♥"), cc("5", "♦"), cc("J", "♠")];
+  localStorage.removeItem("big2settings");
+  serverSays("state", playingState({ myHand: scrambled, handCounts: [6, 5, 6, 7] }));
+  await settle();
+  serverSays("state", playingState({ myHand: scrambled, handCounts: [6, 5, 6, 7], round: 2 }));
+  await settle();
+  openSettings();
+  await settle();
+  ok("settings has the hand-order setting", text().includes("การเรียงไพ่ในมือ"));
+  ok("with the two directions", !!dirBtn("เล็ก → ใหญ่") && !!dirBtn("ใหญ่ → เล็ก"));
+  ok("small-to-large is the default, as it always was", dirBtn("เล็ก → ใหญ่").getAttribute("aria-checked") === "true" && dirBtn("ใหญ่ → เล็ก").getAttribute("aria-checked") === "false");
+  ok("it does not disturb the theme picker's own buttons", buttons().filter((b) => b.hasAttribute("aria-pressed")).length === 6);
+  sent.length = 0;
+  dirBtn("ใหญ่ → เล็ก").click();
+  await settle();
+  ok("choosing large-to-small re-sorts the hand at once (2 on the left, 3 on the right)",
+     handOrder().join(" ") === "2♠ K♥ J♠ 8♥ 5♦ 3♣");
+  ok("the radio moves", dirBtn("ใหญ่ → เล็ก").getAttribute("aria-checked") === "true" && dirBtn("เล็ก → ใหญ่").getAttribute("aria-checked") === "false");
+  ok("it is remembered on this device", JSON.parse(localStorage.getItem("big2settings")).sortDir === "desc");
+  ok("without touching the other settings", JSON.parse(localStorage.getItem("big2settings")).soundOn === true);
+  ok("and nothing goes to the server (it is one person's own arrangement)", sent.length === 0);
+  byLabel("ปิด").click();
+  await settle();
+  byLabel("เรียงดอก").click();
+  await settle();
+  ok("sort-by-suit follows the direction too (spades first, clubs last)", handOrder().join(" ") === "2♠ J♠ K♥ 8♥ 5♦ 3♣");
+  byLabel("เรียงเลข").click();
+  await settle();
+  ok("and sort-by-number", handOrder().join(" ") === "2♠ K♥ J♠ 8♥ 5♦ 3♣");
+  // a new deal comes in the chosen order, whatever order the server sent it in
+  serverSays("state", playingState({ myHand: [cc("4", "♣")], handCounts: [1, 5, 6, 7], round: 3 }));
+  await settle();
+  serverSays("state", playingState({ myHand: scrambled, handCounts: [6, 5, 6, 7], round: 4 }));
+  await settle();
+  ok("a new deal is laid out large-to-small", handOrder().join(" ") === "2♠ K♥ J♠ 8♥ 5♦ 3♣");
+  // the plays list and the history are not the player's own hand: they keep the natural order
+  serverSays("state", playingState({ myHand: scrambled, handCounts: [6, 5, 6, 7], round: 4, trickPile: [{ seat: 2, cards: [cc("8", "♦"), cc("8", "♣")] }] }));
+  await settle();
+  if (felt()) felt().click();
+  await settle();
+  ok("the list of plays still reads small-to-large", pm().includes("8♣8♦"));
+  byLabel("ปิด").click();
+  await settle();
+  openSettings();
+  await settle();
+  dirBtn("เล็ก → ใหญ่").click();
+  await settle();
+  byLabel("ปิด").click();
+  await settle();
+  ok("switching back puts the small cards on the left again", handOrder().join(" ") === "3♣ 5♦ 8♥ J♠ K♥ 2♠");
+  ok("and that is saved too", JSON.parse(localStorage.getItem("big2settings")).sortDir === "asc");
+
+  // a new visit: the hand comes back in the chosen order from the very first frame
+  const visitWith = async (saved, handToSend) => {
+    const d4 = new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>', { url: "http://localhost/", pretendToBeVisual: true });
+    const w4 = d4.window;
+    if (saved !== undefined) w4.localStorage.setItem("big2settings", saved);
+    const handlers4 = {};
+    const own = { on: (ev, fn) => { (handlers4[ev] ||= []).push(fn); }, off: () => {}, emit: () => {}, close: () => {}, disconnect: () => {} };
+    new Function("React", "ReactDOM", "io", "window", "document", "localStorage", "navigator", src)(
+      global.React, global.ReactDOM, () => own, w4, w4.document, w4.localStorage, w4.navigator);
+    await settle();
+    (handlers4.state || []).forEach((fn) => fn(playingState({ myHand: handToSend, handCounts: [6, 5, 6, 7] })));
+    const cardsNow = () => [...w4.document.querySelectorAll("div")].filter((d) => d.style.touchAction === "none");
+    // wait for the hand to be drawn rather than for a fixed time: pages opened one
+    // after another get slower, and a fixed wait made this test fail now and then
+    for (let waited = 0; cardsNow().length < handToSend.length && waited < 3000; waited += 20) await new Promise((r) => setTimeout(r, 20));
+    await settle();
+    return cardsNow().map((d) => (d.textContent || "").trim().slice(0, -1)).join(" ");
+  };
+  ok("after a refresh a large-to-small player still gets their hand that way",
+     (await visitWith(JSON.stringify({ sortDir: "desc" }), scrambled)) === "2♠ K♥ J♠ 8♥ 5♦ 3♣");
+  ok("a small-to-large player gets theirs that way", (await visitWith(JSON.stringify({ sortDir: "asc" }), scrambled)) === "3♣ 5♦ 8♥ J♠ K♥ 2♠");
+  ok("a first visit is small-to-large", (await visitWith(undefined, scrambled)) === "3♣ 5♦ 8♥ J♠ K♥ 2♠");
+  ok("a saved value it does not know is treated as small-to-large", (await visitWith(JSON.stringify({ sortDir: "sideways" }), scrambled)) === "3♣ 5♦ 8♥ J♠ K♥ 2♠");
+  ok("damaged saved settings do not break the hand", (await visitWith("{ not json", scrambled)) === "3♣ 5♦ 8♥ J♠ K♥ 2♠");
 
   console.log("\ninvite link");
   serverSays("state", { code: "KQ7M", phase: "waiting", players: ["Pok", null, null, null],
