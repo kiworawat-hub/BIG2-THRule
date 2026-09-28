@@ -561,6 +561,109 @@ const byLabel = (s) => buttons().find((b) => (b.textContent || "").includes(s));
   serverSays("state", playingState());
   await settle();
 
+  console.log("\nthemes");
+  const root = document.documentElement;
+  const cssVar = (k) => root.style.getPropertyValue("--" + k).trim();
+  const openSettings = () => [...document.querySelectorAll("span")].find((sp) => (sp.textContent || "").startsWith("⚙️ ตั้งค่า")).click();
+  const themeBtn = (name) => buttons().find((b) => (b.textContent || "").includes(name) && b.hasAttribute("aria-pressed"));
+  const THEME_NAMES = ["คลาสสิก", "เขียวสนเข้ม", "ทีลกลางคืน", "ไวน์แดง", "ม่วงยามค่ำ", "ถ่านหิน"];
+  const VAR_KEYS = ["bg1", "bg2", "bg3", "felt1", "felt2", "felt3", "rail", "rail-inner", "panel", "card", "border", "border2", "input", "seat1", "seat2", "faint"];
+  localStorage.removeItem("big2settings");
+  serverSays("state", playingState());
+  await settle();
+  ok("the page starts on the original colours", cssVar("bg1") === "#1e4a7a" && cssVar("felt1") === "#2e9b5f");
+  openSettings();
+  await settle();
+  ok("settings has a theme picker", text().includes("ธีมสี"));
+  ok("with six themes: the original and five new ones",
+     THEME_NAMES.every((n) => !!themeBtn(n)) && buttons().filter((b) => b.hasAttribute("aria-pressed")).length === 6);
+  ok("the original is the one ticked", themeBtn("คลาสสิก").getAttribute("aria-pressed") === "true");
+
+  const meta = document.createElement("meta");
+  meta.setAttribute("name", "theme-color"); meta.setAttribute("content", "#0d2848");
+  document.head.appendChild(meta);
+  themeBtn("เขียวสนเข้ม").click();
+  await settle();
+  ok("choosing a theme repaints the table at once", cssVar("felt1") === "#2a6b4a" && cssVar("felt3") === "#133826");
+  ok("and the backdrop", cssVar("bg1") === "#16202b");
+  ok("and the panels and borders", cssVar("panel") === "#101a22" && cssVar("border") === "#2c4a45");
+  ok("the page behind the app follows (overscroll, notch)", root.style.backgroundColor === "rgb(8, 13, 19)");
+  ok("so does the browser's own bar", meta.getAttribute("content") === "#0e1620");
+  const savedNow = () => JSON.parse(localStorage.getItem("big2settings") || "{}");
+  ok("the choice is remembered on this device", savedNow().theme === "pine");
+  ok("the other settings are not disturbed", savedNow().soundOn === true && savedNow().vibrateOn === true);
+  ok("the tick moves", themeBtn("เขียวสนเข้ม").getAttribute("aria-pressed") === "true" && themeBtn("คลาสสิก").getAttribute("aria-pressed") === "false");
+  ok("nothing was sent to the server (a theme is one person's own)", !sent.some((m) => /theme/i.test(m.ev)));
+  byLabel("ปิด").click();
+  await settle();
+  ok("the page background is drawn from the theme variables", [...document.querySelectorAll("div")].some((d) => (d.style.background || "").includes("var(--bg1")));
+  ok("and so is the felt", felt() && felt().style.background.includes("var(--felt1") && felt().style.border.includes("var(--rail"));
+  ok("and the panels", [...document.querySelectorAll("div")].some((d) => (d.style.border || "").includes("var(--border")));
+
+  // every theme is complete, distinct, and kept calm -- the reason they exist
+  const lin = (c) => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
+  const lum = (h) => { const n = parseInt(h.slice(1), 16); return 0.2126 * lin((n >> 16) & 255) + 0.7152 * lin((n >> 8) & 255) + 0.0722 * lin(n & 255); };
+  const ratio = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+  const CARD_FACE = "#fdfcf7", CREAM = "#f4e9d8", GOLD = "#d4af37", MUTED = "#8a9a8e";
+  const all = {};
+  openSettings();
+  await settle();
+  for (const n of THEME_NAMES) {
+    themeBtn(n).click();
+    await settle();
+    all[n] = Object.fromEntries(VAR_KEYS.map((k) => [k, cssVar(k)]));
+  }
+  ok("every theme sets every variable", THEME_NAMES.every((n) => VAR_KEYS.every((k) => all[n][k] && all[n][k].length > 3)));
+  ok("no two themes are the same", new Set(THEME_NAMES.map((n) => JSON.stringify(all[n]))).size === 6);
+  ok("the original is exactly the original", all["คลาสสิก"].bg1 === "#1e4a7a" && all["คลาสสิก"].felt1 === "#2e9b5f" && all["คลาสสิก"].panel === "#0f1f3a");
+  const fresh = THEME_NAMES.filter((n) => n !== "คลาสสิก");
+  const orig = all["คลาสสิก"];
+  ok("each new backdrop is near-black (the original's is about 5x brighter)", fresh.every((n) => lum(all[n].bg1) <= 0.02 && lum(all[n].bg1) < lum(orig.bg1) / 3));
+  ok("each new table is at most half as bright as the original's", fresh.every((n) => lum(all[n].felt1) <= 0.15 && lum(all[n].felt1) < lum(orig.felt1) / 1.5));
+  ok("so the cards stand out from it more than they used to", fresh.every((n) => ratio(CARD_FACE, all[n].felt1) >= 5 && ratio(CARD_FACE, all[n].felt1) > ratio(CARD_FACE, orig.felt1)));
+  ok("body text stays easy to read on the panels", THEME_NAMES.every((n) => ratio(CREAM, all[n].panel) >= 12));
+  ok("gold headings too", THEME_NAMES.every((n) => ratio(GOLD, all[n].panel) >= 7));
+  ok("secondary text too", THEME_NAMES.every((n) => ratio(MUTED, all[n].panel) >= 5));
+  ok("and hint text is no harder to read than it was", THEME_NAMES.every((n) => ratio(all[n].faint, all[n].panel) >= ratio(orig.faint, orig.panel) - 0.05));
+  byLabel("ปิด").click();
+  await settle();
+  localStorage.removeItem("big2settings");
+  openSettings();
+  await settle();
+  themeBtn("คลาสสิก").click();
+  await settle();
+  byLabel("ปิด").click();
+  await settle();
+  ok("switching back restores the original completely", cssVar("bg1") === "#1e4a7a" && cssVar("border") === "#2f5f8f" && meta.getAttribute("content") === "#0d2848");
+
+  // a new visit: the saved theme is on the page before anything is drawn
+  const themedVisit = (saved) => {
+    const d3 = new JSDOM('<!doctype html><html><head><meta name="theme-color" content="#0d2848"></head><body><div id="root"></div></body></html>',
+      { url: "http://localhost/", pretendToBeVisual: true });
+    const w3 = d3.window;
+    if (saved !== undefined) w3.localStorage.setItem("big2settings", saved);
+    // its own socket: sharing fakeSocket would make this page draw every state the
+    // rest of the test sends, and the extra rendering makes the timed tests late
+    const quiet = { on: () => {}, off: () => {}, emit: () => {}, close: () => {}, disconnect: () => {} };
+    new Function("React", "ReactDOM", "io", "window", "document", "localStorage", "navigator", src)(
+      global.React, global.ReactDOM, () => quiet, w3, w3.document, w3.localStorage, w3.navigator);
+    return w3;
+  };
+  let w3 = themedVisit(JSON.stringify({ soundOn: false, theme: "burgundy" }));
+  ok("a saved theme is applied on load, before the first paint", w3.document.documentElement.style.getPropertyValue("--felt1") === "#6a2b37");
+  ok("including the browser bar", w3.document.querySelector("meta[name=theme-color]").getAttribute("content") === "#170e10");
+  await settle();
+  ok("the lobby is drawn in it too", (w3.document.body.innerHTML || "").includes("var(--bg1"));
+  w3 = themedVisit(JSON.stringify({ theme: "not-a-theme" }));
+  ok("a theme name it does not know falls back to the original", w3.document.documentElement.style.getPropertyValue("--bg1") === "#1e4a7a");
+  w3 = themedVisit("{ this is not json");
+  ok("damaged saved settings do not break loading", w3.document.documentElement.style.getPropertyValue("--bg1") === "#1e4a7a");
+  w3 = themedVisit(undefined);
+  ok("a first visit gets the original", w3.document.documentElement.style.getPropertyValue("--felt1") === "#2e9b5f");
+
+  serverSays("state", playingState());
+  await settle();
+
   console.log("\ninvite link");
   serverSays("state", { code: "KQ7M", phase: "waiting", players: ["Pok", null, null, null],
     mySeat: 0, isHost: true, myHand: [], handCounts: [0, 0, 0, 0], allHands: null, turn: null,
