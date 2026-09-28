@@ -7,7 +7,7 @@ const { useState, useEffect, useRef, useCallback } = React;
 
 // Shown in the lobby so a player can say which version they are looking at.
 // Keep in step with package.json and CHANGELOG.md.
-const APP_VERSION = "1.3.1";
+const APP_VERSION = "1.3.2";
 
 // A friend opening big2unity.onrender.com/?room=KQ7M lands with the code
 // already filled in, so joining is one tap instead of typing it correctly.
@@ -277,7 +277,7 @@ function Table({ mySeat, players, handCounts, turn, trickPile, finished, passedT
     return /* @__PURE__ */ React.createElement("div", { style: { padding: 3, borderRadius: 14, background: ringBg, boxShadow: ringShadow, flexShrink: 0 } }, inner);
   }
   return /* @__PURE__ */ React.createElement("div", { style: { width: "100%", marginBottom: 12 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "center", marginBottom: 10 } }, /* @__PURE__ */ React.createElement(Seat, { seat: bySeat.top })), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 12 } }, /* @__PURE__ */ React.createElement(Seat, { seat: bySeat.left }), /* @__PURE__ */ React.createElement("div", { ref: feltRef, onClick: onOpenPlays, style: {
-    // tapping the table lists everything played this round (onOpenPlays)
+    // tapping the table lists the plays of the trick on it (onOpenPlays)
     cursor: onOpenPlays ? "pointer" : "default",
     position: "relative",
     flex: 1,
@@ -423,8 +423,8 @@ const RULES = [
     "ไม่ตอบภายใน 10 วินาทีนับเป็นไม่จับ · บอทไม่ถูกถาม",
   ]],
   ["ดูไพ่ที่ลงแล้ว", [
-    "ระหว่างรอบ แตะที่โต๊ะสีเขียวเพื่อดูไพ่ที่ลงไปแล้วทั้งหมด เรียงตามลำดับ",
-    "จบรอบแล้วดูไม่ได้ (ดูย้อนหลังได้แค่ไพ่ตั้งต้นกับไพ่ที่เหลือในหน้าประวัติ)",
+    "ระหว่างเล่น แตะที่โต๊ะสีเขียวเพื่อดูไพ่ที่ลงในกองนี้ เรียงตามลำดับ",
+    "พอมีคนลีดใหม่ กองเก่าหายไป ดูย้อนหลังไม่ได้ (ดูไพ่ตั้งต้นกับไพ่ที่เหลือของแต่ละรอบได้ในหน้าประวัติ)",
   ]],
   ["การนับแต้ม", [
     "2 = 5 แต้ม · A = 2 แต้ม · ใบอื่น = 1 แต้ม",
@@ -471,25 +471,14 @@ function MiniCard({ card }) {
     boxShadow: "0 1px 3px rgba(0,0,0,.35)"
   } }, card.rank, card.suit);
 }
-// Everything played so far this round, in order, opened by tapping the table.
-// It lives only while the round does: the server stops answering the moment
-// the round ends, and the client closes this then.
-function PlaysModal({ plays, loading, players, mySeat, onClose }) {
-  const listRef = useRef(null);
-  // open on the newest plays, like a chat; the numbers say where you are
-  useEffect(() => {
-    if (!loading && listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight;
-  }, [loading]);
+// The plays of the trick that is on the table right now, oldest first, opened by
+// tapping the table. It reads the same pile the table draws (trickPile), which
+// the server empties the moment a trick ends -- so once somebody leads afresh the
+// old trick is gone, and nothing here can show it.
+function PlaysModal({ trickPile, players, mySeat, onClose }) {
   const nameOf = (s) => s === mySeat ? "คุณ" : players[s] || `บอท ${s + 1}`;
-  return /* @__PURE__ */ React.createElement("div", { style: styles.modalOverlay, onClick: onClose }, /* @__PURE__ */ React.createElement("div", { style: styles.modalCard, onClick: (e) => e.stopPropagation() }, /* @__PURE__ */ React.createElement("h2", { style: { color: GOLD, textAlign: "center", marginBottom: 4 } }, "ไพ่ที่ลงแล้วในรอบนี้"), /* @__PURE__ */ React.createElement("p", { style: { color: MUTED, fontSize: 11, textAlign: "center", marginTop: 0, marginBottom: 10 } }, "เส้นคั่น = เริ่มกองใหม่"), loading ? /* @__PURE__ */ React.createElement("p", { style: { color: MUTED, textAlign: "center" } }, "กำลังโหลด...") : plays.length === 0 ? /* @__PURE__ */ React.createElement("p", { style: { color: MUTED, textAlign: "center" } }, "ยังไม่มีใครลงไพ่") : /* @__PURE__ */ React.createElement("div", { ref: listRef, style: { maxHeight: "min(55vh, 420px)", overflowY: "auto", paddingRight: 2 } }, plays.map((p, i) => /* @__PURE__ */ React.createElement("div", { key: p.n, style: {
-    display: "flex",
-    alignItems: "center",
-    gap: 8,
-    padding: "5px 2px",
-    // a play that opens a new trick starts a new group
-    borderTop: p.lead && i > 0 ? "1px solid rgba(255,255,255,.18)" : "none",
-    marginTop: p.lead && i > 0 ? 4 : 0
-  } }, /* @__PURE__ */ React.createElement("span", { style: { width: 22, textAlign: "right", color: FAINT, fontSize: 11, flexShrink: 0 } }, p.n), /* @__PURE__ */ React.createElement("span", { style: { width: 8, height: 8, borderRadius: "50%", background: SEAT_COLORS[p.seat], flexShrink: 0 } }), /* @__PURE__ */ React.createElement("span", { style: { width: 64, color: CREAM, fontSize: 12, fontWeight: 600, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis", flexShrink: 0 } }, nameOf(p.seat)), /* @__PURE__ */ React.createElement("span", { style: { display: "flex", gap: 3, flexWrap: "wrap" } }, sortCards(p.cards, "rank").map((c) => /* @__PURE__ */ React.createElement(MiniCard, { key: cardKey(c), card: c })))))), /* @__PURE__ */ React.createElement("button", { style: merge(merge({}, styles.goldBtn), { marginTop: 12 }), onClick: onClose }, "ปิด")));
+  const plays = trickPile || [];
+  return /* @__PURE__ */ React.createElement("div", { style: styles.modalOverlay, onClick: onClose }, /* @__PURE__ */ React.createElement("div", { style: styles.modalCard, onClick: (e) => e.stopPropagation() }, /* @__PURE__ */ React.createElement("h2", { style: { color: GOLD, textAlign: "center", marginBottom: 4 } }, "ไพ่ที่ลงในกองนี้"), /* @__PURE__ */ React.createElement("p", { style: { color: MUTED, fontSize: 11, textAlign: "center", marginTop: 0, marginBottom: 10 } }, "พอมีคนลีดใหม่ กองเก่าจะหายไป"), plays.length === 0 ? /* @__PURE__ */ React.createElement("p", { style: { color: MUTED, textAlign: "center" } }, "ยังไม่มีใครลงไพ่ในกองนี้") : /* @__PURE__ */ React.createElement("div", { style: { maxHeight: "min(55vh, 420px)", overflowY: "auto", paddingRight: 2 } }, plays.map((p, i) => /* @__PURE__ */ React.createElement("div", { key: i, style: { display: "flex", alignItems: "center", gap: 8, padding: "5px 2px" } }, /* @__PURE__ */ React.createElement("span", { style: { width: 22, textAlign: "right", color: FAINT, fontSize: 11, flexShrink: 0 } }, i + 1), /* @__PURE__ */ React.createElement("span", { style: { width: 8, height: 8, borderRadius: "50%", background: SEAT_COLORS[p.seat], flexShrink: 0 } }), /* @__PURE__ */ React.createElement("span", { style: { width: 64, color: CREAM, fontSize: 12, fontWeight: 600, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis", flexShrink: 0 } }, nameOf(p.seat)), /* @__PURE__ */ React.createElement("span", { style: { display: "flex", gap: 3, flexWrap: "wrap" } }, sortCards(p.cards, "rank").map((c) => /* @__PURE__ */ React.createElement(MiniCard, { key: cardKey(c), card: c })))))), /* @__PURE__ */ React.createElement("button", { style: merge(merge({}, styles.goldBtn), { marginTop: 12 }), onClick: onClose }, "ปิด")));
 }
 
 function HistoryModal({ roundHistory, loading, players, mySeat, cumulative, onClose }) {
@@ -672,13 +661,10 @@ function App() {
   // when the screen is opened -- see getHistory on the server
   const [history, setHistory] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
-  // tapping the table lists this round's plays; fetched on demand like the
-  // history, and refreshed while open whenever the count in the state changes
   // "4 ตาสุดท้าย" cannot be taken back, so it asks first
   const [confirmLast, setConfirmLast] = useState(false);
+  // tapping the table lists the plays of the trick on it right now
   const [showPlays, setShowPlays] = useState(false);
-  const [plays, setPlays] = useState([]);
-  const [playsLoading, setPlaysLoading] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [settings, setSettingsState] = useState(() => {
     try {
@@ -789,13 +775,9 @@ function App() {
   useEffect(() => {
     if (state && state.matchRoundsRemaining !== null) setConfirmLast(false);
   }, [state ? state.matchRoundsRemaining : null]);
-  // keep an open list of plays current as the round goes on...
-  useEffect(() => {
-    if (showPlays) fetchPlays(false);
-  }, [state ? state.playsCount : 0]);
-  // ...and forget it when the round ends: after that it is gone for good. (The
-  // modal is also only drawn while a round is on, so it vanishes in the very
-  // render that changes the phase; this just stops it coming back next round.)
+  // Forget it when the round ends. (The modal is also only drawn while a round
+  // is on, so it vanishes in the very render that changes the phase; this just
+  // stops it coming back next round.)
   useEffect(() => {
     if (showPlays && (!state || state.phase !== "playing")) setShowPlays(false);
   }, [state ? state.phase : null]);
@@ -859,16 +841,8 @@ function App() {
       setHistoryLoading(false);
     });
   }
-  function fetchPlays(showSpinner) {
-    if (showSpinner) setPlaysLoading(true);
-    socketRef.current.emit("getRoundPlays", {}, (res) => {
-      setPlays(res && res.ok && Array.isArray(res.plays) ? res.plays : []);
-      setPlaysLoading(false);
-    });
-  }
   function openPlays() {
     setShowPlays(true);
-    fetchPlays(true);
   }
   // the answer to "redraw the seats?"; the server moves on and the state that
   // comes back no longer asks us
@@ -1214,7 +1188,7 @@ function App() {
       const score = finalScores[s] || 0;
       return /* @__PURE__ */ React.createElement("div", { key: s, style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 12px", marginBottom: 6, borderRadius: 10, background: i === 0 ? "rgba(212,175,55,.15)" : "rgba(255,255,255,.05)", border: i === 0 ? "1px solid #d4af37" : "1px solid transparent" } }, /* @__PURE__ */ React.createElement("span", { style: { color: CREAM, fontWeight: 600, fontSize: 14 } }, i === 0 && "\u{1F3C6} ", s === state.mySeat ? "คุณ" : state.players[s] || `บอท ${s + 1}`), /* @__PURE__ */ React.createElement("span", { style: { color: score >= 0 ? POS_COLOR : NEG_COLOR, fontWeight: 900, fontSize: 16 } }, score >= 0 ? "+" : "", score));
     })), isHost ? /* @__PURE__ */ React.createElement("button", { style: merge(merge({}, styles.goldBtn), { marginTop: 16 }), onClick: restartMatch }, "เล่นแมตช์ใหม่") : /* @__PURE__ */ React.createElement("p", { style: { color: MUTED, fontSize: 12, marginTop: 14, textAlign: "center" } }, "รอเจ้าของห้องเริ่มแมตช์ใหม่..."), /* @__PURE__ */ React.createElement("p", { style: { textAlign: "center", marginTop: 14 } }, /* @__PURE__ */ React.createElement("span", { onClick: watching ? stopWatching : leaveRoom, style: { color: FAINT, fontSize: 12, textDecoration: "underline", cursor: "pointer" } }, watching ? "เลิกดู" : "ออกจากห้อง"))));
-  })())), state.phase === "finished" && askedMe && /* @__PURE__ */ React.createElement("div", { style: merge(merge({}, styles.modalOverlay), { zIndex: 1100 }) }, /* @__PURE__ */ React.createElement("div", { style: styles.modalCard }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 40, textAlign: "center" } }, "🎲"), /* @__PURE__ */ React.createElement("div", { style: { color: GOLD, fontWeight: 700, fontSize: 17, textAlign: "center", marginTop: 4 } }, `คุณโดนคูณ ×${myMultiplier}`), /* @__PURE__ */ React.createElement("div", { style: { color: CREAM, fontSize: 14, textAlign: "center", marginTop: 12, lineHeight: 1.6 } }, `ตาต่อไปคุณจะเป็นขาที่ ${seatPrompt.leg}`, seatPrompt.leg === 4 && " (ขาสุดท้าย)"), /* @__PURE__ */ React.createElement("div", { style: { color: CREAM, fontSize: 14, textAlign: "center", fontWeight: 700 } }, "จะจับที่นั่งใหม่ไหม?"), /* @__PURE__ */ React.createElement("button", { style: merge(merge({}, styles.goldBtn), { marginTop: 16 }), onClick: () => answerSeatDraw(true) }, "ใช่ — จับที่นั่งใหม่"), /* @__PURE__ */ React.createElement("button", { style: merge(merge({}, styles.greenBtn), { marginTop: 4 }), onClick: () => answerSeatDraw(false) }, "ไม่ — เล่นต่อที่เดิม"), /* @__PURE__ */ React.createElement("div", { style: { color: FAINT, fontSize: 11, textAlign: "center", marginTop: 10 } }, `เลือกภายใน ${promptSecs} วินาที · ไม่เลือก = ไม่จับ`))), showPlays && state.phase === "playing" && /* @__PURE__ */ React.createElement(PlaysModal, { plays, loading: playsLoading, players: state.players, mySeat: state.mySeat, onClose: () => setShowPlays(false) }), confirmLast && state.matchRoundsRemaining === null && /* @__PURE__ */ React.createElement(ConfirmLastRoundsModal, { onConfirm: () => { startLastRounds(); setConfirmLast(false); }, onCancel: () => setConfirmLast(false) }), showRules && /* @__PURE__ */ React.createElement(RulesModal, { onClose: () => setShowRules(false) }), showHistory && /* @__PURE__ */ React.createElement(HistoryModal, { roundHistory: history, loading: historyLoading, players: state.players, mySeat: state.mySeat, cumulative: state.cumulative, onClose: () => setShowHistory(false) }), showSettings && /* @__PURE__ */ React.createElement(
+  })())), state.phase === "finished" && askedMe && /* @__PURE__ */ React.createElement("div", { style: merge(merge({}, styles.modalOverlay), { zIndex: 1100 }) }, /* @__PURE__ */ React.createElement("div", { style: styles.modalCard }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 40, textAlign: "center" } }, "🎲"), /* @__PURE__ */ React.createElement("div", { style: { color: GOLD, fontWeight: 700, fontSize: 17, textAlign: "center", marginTop: 4 } }, `คุณโดนคูณ ×${myMultiplier}`), /* @__PURE__ */ React.createElement("div", { style: { color: CREAM, fontSize: 14, textAlign: "center", marginTop: 12, lineHeight: 1.6 } }, `ตาต่อไปคุณจะเป็นขาที่ ${seatPrompt.leg}`, seatPrompt.leg === 4 && " (ขาสุดท้าย)"), /* @__PURE__ */ React.createElement("div", { style: { color: CREAM, fontSize: 14, textAlign: "center", fontWeight: 700 } }, "จะจับที่นั่งใหม่ไหม?"), /* @__PURE__ */ React.createElement("button", { style: merge(merge({}, styles.goldBtn), { marginTop: 16 }), onClick: () => answerSeatDraw(true) }, "ใช่ — จับที่นั่งใหม่"), /* @__PURE__ */ React.createElement("button", { style: merge(merge({}, styles.greenBtn), { marginTop: 4 }), onClick: () => answerSeatDraw(false) }, "ไม่ — เล่นต่อที่เดิม"), /* @__PURE__ */ React.createElement("div", { style: { color: FAINT, fontSize: 11, textAlign: "center", marginTop: 10 } }, `เลือกภายใน ${promptSecs} วินาที · ไม่เลือก = ไม่จับ`))), showPlays && state.phase === "playing" && /* @__PURE__ */ React.createElement(PlaysModal, { trickPile: state.trickPile, players: state.players, mySeat: state.mySeat, onClose: () => setShowPlays(false) }), confirmLast && state.matchRoundsRemaining === null && /* @__PURE__ */ React.createElement(ConfirmLastRoundsModal, { onConfirm: () => { startLastRounds(); setConfirmLast(false); }, onCancel: () => setConfirmLast(false) }), showRules && /* @__PURE__ */ React.createElement(RulesModal, { onClose: () => setShowRules(false) }), showHistory && /* @__PURE__ */ React.createElement(HistoryModal, { roundHistory: history, loading: historyLoading, players: state.players, mySeat: state.mySeat, cumulative: state.cumulative, onClose: () => setShowHistory(false) }), showSettings && /* @__PURE__ */ React.createElement(
     SettingsModal,
     {
       settings,
