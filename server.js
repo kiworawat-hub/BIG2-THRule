@@ -131,10 +131,6 @@ function newRoomState(hostName, hostSocketId) {
     chat: [],
     seatDraw: null,
     lastMultiplierVictims: [],
-    // The plays of the round being played, oldest first: { n, seat, cards, lead }.
-    // Wiped when the round ends -- it is a reminder of what is already on the
-    // discard pile, not part of the match history.
-    roundPlays: [],
     // While the multiplied players are being asked about a reseat:
     //   { seat, leg, until, queue: [seats still to ask] }
     seatPrompt: null,
@@ -347,9 +343,6 @@ function sanitizeForSeat(room, seat) {
     seatPrompt: room.seatPrompt
       ? { seat: room.seatPrompt.seat, leg: room.seatPrompt.leg, until: room.seatPrompt.until }
       : null,
-    // only how many plays there are -- the list itself is fetched with
-    // getRoundPlays when somebody taps the table
-    playsCount: room.roundPlays.length,
     // the seat the server is about to pass for because it cannot answer
     autoPassSeat: pendingAutoPassSeat(room),
     matchRoundsRemaining: room.matchRoundsRemaining,
@@ -374,7 +367,6 @@ function startRound(room, forcedLeaderSeat) {
   room.hands = hands;
   // a copy, taken before anybody plays: room.hands only ever shrinks from here
   room.startingHands = hands.map(h => h.map(c => ({ rank: c.rank, suit: c.suit })));
-  room.roundPlays = [];
   room.seatPrompt = null;
   room.turn = startSeat;
   room.turnStartedAt = Date.now();
@@ -604,12 +596,6 @@ const ROUND_END_REVEAL_MS = 1600; // let the winning card sit visible on the tab
 
 function applyPlay(room, seat, cards) {
   const hand = room.hands[seat];
-  // trickPile is empty exactly when this play opens a trick
-  const opensTrick = room.trickPile.length === 0;
-  room.roundPlays.push({
-    n: room.roundPlays.length + 1, seat, lead: opensTrick,
-    cards: cards.map(c => ({ rank: c.rank, suit: c.suit })),
-  });
   const selKeys = new Set(cards.map(cardKey));
   const newHand = hand.filter(c => !selKeys.has(cardKey(c)));
   room.hands[seat] = newHand;
@@ -638,7 +624,6 @@ function applyPlay(room, seat, cards) {
 function finishRound(room, seat) {
   room.finished = [seat];
   room.phase = "finished";
-  room.roundPlays = []; // once the round is over its plays can no longer be looked up
   room.payout = computePayouts(room.hands);
   room.roundHistory.push({
     round: room.round, net: room.payout.net, scores: room.payout.scores,
@@ -896,17 +881,6 @@ io.on("connection", (socket) => {
     if (typeof cb !== "function") return;
     const room = roomOf(socket.id);
     cb({ ok: !!room, roundHistory: room ? room.roundHistory : [] });
-  });
-
-  // What has been played so far in the round in progress, oldest first -- the
-  // list behind tapping the table. Only while the round is on: afterwards it is
-  // gone, on purpose (the history screen is where finished rounds live). Every
-  // card in it is already face up on the table, so an observer may ask too.
-  socket.on("getRoundPlays", (_payload, cb) => {
-    if (typeof cb !== "function") return;
-    const room = roomOf(socket.id);
-    if (!room || room.phase !== "playing") return cb({ ok: false, plays: [] });
-    cb({ ok: true, plays: room.roundPlays });
   });
 
   // The answer to "redraw the seats?" -- only the player being asked counts.
