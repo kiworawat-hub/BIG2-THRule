@@ -6,7 +6,6 @@
 
 const SUITS = ["♣", "♦", "♥", "♠"];
 const RANKS = ["3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A", "2"];
-const SEAT_COLORS = ["#ff5252", "#29b6f6", "#ff9800", "#4caf50"];
 
 function rankIdx(r) { return RANKS.indexOf(r); }
 function suitIdx(s) { return SUITS.indexOf(s); }
@@ -42,6 +41,24 @@ function findStartPlayer(hands) {
     if (hands[p].some(c => c.rank === "3" && c.suit === "♣")) return p;
   }
   return 0;
+}
+
+// Is `cards` a well-formed selection the seat actually holds? Counts copies,
+// so the same card sent twice fails even though the hand contains it once —
+// a client that sends [2♠,2♠] would otherwise get an unbeatable "pair".
+function handContainsAll(hand, cards) {
+  if (!Array.isArray(cards) || cards.length === 0 || cards.length > 5) return false;
+  const pool = new Map();
+  for (const c of hand) pool.set(cardKey(c), (pool.get(cardKey(c)) || 0) + 1);
+  for (const c of cards) {
+    if (!c || typeof c !== "object") return false;
+    if (!RANKS.includes(c.rank) || !SUITS.includes(c.suit)) return false;
+    const key = cardKey(c);
+    const left = pool.get(key) || 0;
+    if (left === 0) return false;
+    pool.set(key, left - 1);
+  }
+  return true;
 }
 
 function classifyCombo(cards) {
@@ -173,6 +190,7 @@ function playerScore(hand) {
 
 function computePayouts(hands) {
   const scores = hands.map(h => playerScore(h));
+  const points = hands.map(h => handPoints(h)); // raw points, before the x2/x3 multiplier
   const net = [0, 0, 0, 0];
   const pairDetails = [];
   for (let i = 0; i < 4; i++) {
@@ -182,7 +200,7 @@ function computePayouts(hands) {
       else if (diff < 0) { net[j] += -diff; net[i] -= -diff; pairDetails.push({ from: i, to: j, amount: -diff }); }
     }
   }
-  return { scores, net, pairDetails };
+  return { scores, points, net, pairDetails };
 }
 
 function trickShouldReset(finishedSeats, passedThisTrick, ownerSeat) {
@@ -206,36 +224,78 @@ function resolveNextTurn(finishedSeats, passedThisTrick, ownerSeat, fromSeat) {
   return { reset: false, nextTurn: s };
 }
 
-function findOneCardSeat(hands) {
-  return [0, 1, 2, 3].find(s => hands[s] && hands[s].length === 1);
-}
-
 function highestCard(hand) {
   return hand.reduce((best, c) => (cardValue(c) > cardValue(best) ? c : best), hand[0]);
 }
 
-// BIG2 rule: if you choose to play/lead a SINGLE and the seat right after
-// you has exactly 1 card left, it must be your highest card. Choosing a
-// pair/triple/5-set instead is always unrestricted.
+// The seat that acts after `seat`: the next chair round the table, skipping
+// only players who are already out of the round. Deliberately NOT the same as
+// resolveNextTurn, which also skips whoever has passed in this trick and
+// whoever owns it -- that answers "who plays next", and the last-card rule is
+// about who is sitting next to you.
+function nextSeatAfter(finishedSeats, seat) {
+  for (let i = 1; i <= 4; i++) {
+    const s = (seat + i) % 4;
+    if (!(finishedSeats || []).includes(s)) return s;
+  }
+  return seat;
+}
+
+// BIG2 rule: if the seat next to you has exactly 1 card left and you choose to
+// play/lead a SINGLE, it must be your highest card. Choosing a pair / triple /
+// 5-set instead is always unrestricted.
+//
+// "Next to you" means the next chair -- whether that player has already passed
+// in this trick, or owns it, makes no difference. Two things follow:
+//   * a one-card player further round the table does not bind you if the
+//     player next to you is not on one card (even if that player has passed)
+//   * a one-card player who owns the current trick does bind the seat before
+//     them: that seat is the last chance to stop them going out
 function getForcedHighCard(state, actingSeat) {
-  const oneCardSeat = findOneCardSeat(state.hands);
-  if (oneCardSeat === undefined || oneCardSeat === actingSeat) return null;
-
-  const isLeading = state.lastPlayerSeat === null;
-  const ownerSeat = isLeading ? actingSeat : state.lastPlayerSeat;
-  const passedSet = isLeading ? [] : (state.passedThisTrick || []);
-  const resolved = resolveNextTurn(state.finished, passedSet, ownerSeat, actingSeat);
-  if (resolved.nextTurn !== oneCardSeat) return null;
-
   const hand = state.hands[actingSeat];
   if (!hand || hand.length === 0) return null;
-  const myHighest = highestCard(hand);
+  const nextSeat = nextSeatAfter(state.finished, actingSeat);
+  if (nextSeat === actingSeat) return null;
+  const nextHand = state.hands[nextSeat];
+  if (!nextHand || nextHand.length !== 1) return null;
 
+  const myHighest = highestCard(hand);
+  const isLeading = state.lastPlayerSeat === null;
   if (!isLeading) {
+    // answering a trick: only singles are affected, and only if your highest
+    // card can actually beat the one on the table
     if (!state.lastPlay || state.lastPlay.cards.length !== 1) return null;
     if (cardValue(myHighest) <= cardValue(state.lastPlay.cards[0])) return null;
   }
   return myHighest;
+}
+
+// What the server plays for a seat whose clock ran out. It has to obey the
+// last-card rule too -- it used to lead the lowest card without looking, which
+// handed a one-card player an easy way out.
+function autoTimeoutMove(state, seat) {
+  const forced = getForcedHighCard(state, seat);
+  if (forced) return [forced];
+  const leading = state.lastPlayerSeat === null || state.lastPlayerSeat === seat;
+  if (!leading) return null; // pass
+  const lowest = [...state.hands[seat]].sort((a, b) => cardValue(a) - cardValue(b))[0];
+  return lowest ? [lowest] : null;
+}
+
+// True when the seat cannot possibly answer the trick because it holds fewer
+// cards than the play on the table. Every answer needs at least as many cards
+// as the play it beats (a single is beaten by 1 or 3, a pair by 2 or 4, a
+// triple by 3, a quad by 4, a 5-card set by 5), so this is exact -- no card
+// looking involved, and it never takes a play away from anyone.
+function cannotBeatByCount(hand, lastPlayCards) {
+  if (!hand || !lastPlayCards || lastPlayCards.length === 0) return false;
+  return hand.length < lastPlayCards.length;
+}
+
+// Where a seat stands in the next round's turn order, counted from the leader
+// (who is always last round's winner): 1 = leads, 4 = the last leg.
+function legOf(seat, leaderSeat) {
+  return ((seat - leaderSeat + 4) % 4) + 1;
 }
 
 function drawSeatCards() {
@@ -251,11 +311,6 @@ function fillRemainingSeats(seat1, seat2) {
   const remaining = [0, 1, 2, 3].filter(s => s !== seat1 && s !== seat2);
   remaining.sort((a, b) => ((a - seat2 + 4) % 4) - ((b - seat2 + 4) % 4));
   return remaining;
-}
-
-function seatDrawTriggered(multiplierVictims, leaderSeat) {
-  if (!multiplierVictims || multiplierVictims.length === 0) return false;
-  return multiplierVictims.some(s => (s - leaderSeat + 4) % 4 === 3);
 }
 
 function find5CardCombos(hand) {
@@ -327,10 +382,11 @@ function find5CardCombos(hand) {
 }
 
 module.exports = {
-  SUITS, RANKS, SEAT_COLORS,
+  SUITS, RANKS,
   cardKey, cardValue, makeDeck, shuffle, dealFour, findStartPlayer,
-  classifyCombo, comboBeats, handPoints, playerScore, computePayouts,
-  trickShouldReset, resolveNextTurn, findOneCardSeat, highestCard, getForcedHighCard,
-  drawSeatCards, seatDrawOrder, fillRemainingSeats, seatDrawTriggered,
+  handContainsAll, classifyCombo, comboBeats, handPoints, playerScore, computePayouts,
+  trickShouldReset, resolveNextTurn, nextSeatAfter, highestCard, getForcedHighCard,
+  autoTimeoutMove, cannotBeatByCount, legOf,
+  drawSeatCards, seatDrawOrder, fillRemainingSeats,
   find5CardCombos,
 };
