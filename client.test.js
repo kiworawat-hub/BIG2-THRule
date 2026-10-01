@@ -285,6 +285,51 @@ const byLabel = (s) => buttons().find((b) => (b.textContent || "").includes(s));
   ok("a card you still hold stays selected when state arrives",
      !!byLabel("ลงไพ่ (1)"));
 
+  console.log("\nwhile paused, the hand itself is still usable");
+  // Pausing used to put up a full click-catching overlay, so nothing on the
+  // table -- not even sorting your own cards while you wait -- could be
+  // touched until someone resumed. Only the server-side actions (play, pass)
+  // need to be blocked; rearranging your own hand sends nothing to the server.
+  serverSays("state", playingState({ myHand: bigHand, handCounts: [6, 5, 6, 7] }));
+  await settle();
+  const pauseOverlay = () => [...document.querySelectorAll("div")].find((d) => (d.textContent || "").includes("พักเกม") && d.style.position === "fixed");
+  serverSays("state", playingState({ myHand: bigHand, handCounts: [6, 5, 6, 7], paused: { by: "Pok", at: Date.now(), until: Date.now() + 300000 } }));
+  await settle();
+  ok("the pause overlay is up", !!pauseOverlay());
+  ok("but it lets touches through to what is behind it", pauseOverlay() && pauseOverlay().style.pointerEvents === "none");
+  ok("except its own card, which must stay clickable (the resume button is on it)",
+     pauseOverlay() && pauseOverlay().firstElementChild && pauseOverlay().firstElementChild.style.pointerEvents === "auto");
+  ok("Play is off while paused -- the server would refuse it anyway",
+     byLabel("ลงไพ่") && byLabel("ลงไพ่").disabled);
+  ok("so is Pass", byLabel("ผ่าน") && byLabel("ผ่าน").disabled);
+
+  const pausedBefore = cardLabels();
+  handCards()[0].dispatchEvent(pointer("pointerdown", 0));
+  await settle();
+  handCards()[0].dispatchEvent(pointer("pointerup", 0));
+  await settle();
+  ok("tapping a card still selects it while paused", !!byLabel("ลงไพ่ (1)"));
+  const dragWhilePaused = handCards()[1];
+  dragWhilePaused.dispatchEvent(pointer("pointerdown", 68));
+  await settle();
+  [20, -30, -80].forEach((x) => dragWhilePaused.dispatchEvent(pointer("pointermove", x)));
+  await settle();
+  window.dispatchEvent(pointer("pointerup", -80));
+  await settle();
+  ok("and dragging still reorders the hand",
+     cardLabels().length === bigHand.length && cardLabels().join() !== pausedBefore.join());
+
+  sent.length = 0;
+  if (byLabel("ลงไพ่")) byLabel("ลงไพ่").click();
+  await settle();
+  ok("but Play still cannot actually be pressed -- nothing is sent", !sent.some((m) => m.ev === "playCards"));
+
+  serverSays("state", playingState({ myHand: bigHand, handCounts: [6, 5, 6, 7] }));
+  await settle();
+  ok("once resumed the overlay is gone", !pauseOverlay());
+  ok("Play works again", byLabel("ลงไพ่") && !byLabel("ลงไพ่").disabled);
+  ok("the card picked while paused is still selected", !!byLabel("ลงไพ่ (1)"));
+
   console.log("\nthe history screen");
   // The history is no longer part of the state broadcast -- it only ever grew,
   // and the state goes out on every play. Opening the screen fetches it.
@@ -526,20 +571,15 @@ const byLabel = (s) => buttons().find((b) => (b.textContent || "").includes(s));
   serverSays("state", playingState());
   await settle();
 
-  console.log("\nthe waiting room asks too");
+  console.log("\nthe waiting room no longer offers \"4 ตาสุดท้าย\"");
+  // the persistent in-game button (under settings) is the only way to start it now
   serverSays("state", playingState({ phase: "waiting", myHand: [] }));
   await settle();
-  sent.length = 0;
-  ok("the host is offered it there", !!byLabel("เล่นแบบ"));
-  byLabel("เล่นแบบ").click();
-  await settle();
-  ok("and is asked to confirm", text().includes("เล่น 4 ตาสุดท้าย?") && !sent.some((m) => m.ev === "startLastRounds"));
-  byLabel("ยืนยัน").click();
-  await settle();
-  ok("confirming sends it", sent.some((m) => m.ev === "startLastRounds"));
+  ok("not even for the host", !byLabel("เล่นแบบ") && !text().includes("4 ตาสุดท้าย"));
+  ok("the match-end options (unlimited / rounds / points / time) are still there", text().includes("จบแมตช์เมื่อ"));
   serverSays("state", playingState({ phase: "waiting", myHand: [], mySeat: 1, isHost: false }));
   await settle();
-  ok("a guest is not offered it", !byLabel("เล่นแบบ"));
+  ok("nor the guest", !byLabel("เล่นแบบ") && !text().includes("4 ตาสุดท้าย"));
   serverSays("state", playingState());
   await settle();
 
@@ -550,6 +590,22 @@ const byLabel = (s) => buttons().find((b) => (b.textContent || "").includes(s));
   serverSays("state", roundOver({ phase: "gameover", mySeat: 3, isHost: true, finalCumulative: [7, -3, 0, -4] }));
   await settle();
   ok("the host in seat 3 is", !!byLabel("เล่นแมตช์ใหม่"));
+  serverSays("state", playingState());
+  await settle();
+
+  console.log("\nthe round and match summaries show real names, not \u0E04ุณ");
+  // "Pok" is mySeat (0) in both fixtures below -- their own name should read on
+  // the screen the same as anyone else's, not be swapped for the word "you"
+  serverSays("state", roundOver());
+  await settle();
+  ok("the round-end summary names the player, not \"คุณ\"", text().includes("Pok") && !text().includes("คุณ"));
+  ok("the winner is still named too", text().includes("Ann") && text().includes("ชนะ"));
+  serverSays("state", playingState());
+  await settle();
+  serverSays("state", roundOver({ phase: "gameover", mySeat: 0, isHost: true, finalCumulative: [7, -3, 0, -4] }));
+  await settle();
+  ok("the final match standings do too", text().includes("Pok") && !text().includes("คุณ"));
+  ok("everyone else is still named by theirs", text().includes("Ann"));
   serverSays("state", playingState());
   await settle();
 
