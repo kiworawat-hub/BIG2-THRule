@@ -7,7 +7,7 @@ const { useState, useEffect, useRef, useCallback } = React;
 
 // Shown in the lobby so a player can say which version they are looking at.
 // Keep in step with package.json and CHANGELOG.md.
-const APP_VERSION = "1.5.1";
+const APP_VERSION = "1.5.2";
 
 // A friend opening big2unity.onrender.com/?room=KQ7M lands with the code
 // already filled in, so joining is one tap instead of typing it correctly.
@@ -526,7 +526,7 @@ const RULES = [
     "เล็กสุดทั้งสำรับ = 3♣   ใหญ่สุด = 2♠",
   ]],
   ["การเริ่มเกม", [
-    "คนที่ถือ 3♣ เป็นคนลงก่อน แต่ลงชุดอะไรก็ได้ ไม่ต้องมี 3♣ ในชุดที่ลง",
+    "คนที่ถือ 3♣ เป็นคนลงก่อน ตาแรกต้องลงชุดที่มี 3♣ (เดี่ยว คู่ หรือชุดอื่นก็ได้)",
     "รอบถัดไป คนชนะรอบที่แล้วเป็นคนลงนำ",
   ]],
   ["ชุดไพ่ที่ลงได้", [
