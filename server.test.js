@@ -663,10 +663,10 @@ async function observeTest() {
     ok("at least the allowed ones went through", rl.answered > 0);
     ok("a normal player on a fresh connection is unaffected", rl.freshOk);
 
-    console.log("\nthe opener may lead anything, not just the 3♣");
+    console.log("\nthe opener must lead a play containing the 3♣");
     const op = await openerTest(12);
     ok("got a deal where we hold the 3♣ (attempt " + (op.attempts || "-") + ")", op.opened === true);
-    ok("leading " + (op.card || "?") + " instead of 3♣ was accepted", op.opened && !op.rejected);
+    ok("leading " + (op.card || "?") + " without the 3♣ was refused", op.opened && !!op.rejected);
 
     console.log("\na seat is guarded while its player is connected");
     const st = await seatTokenTest();
