@@ -364,6 +364,35 @@ function finishedRoom(winner, left, over) {
     hostSock.close(); guestSock.close();
   }
 
+  // ------------------------------------------------------------------
+  console.log("\nthe very first play of the game must contain the 3♣");
+  {
+    const setup = () => {
+      const room = makeRoom();
+      S.startRound(room, null);              // opener chosen by the 3♣
+      room.hands = [H("3♣", "3♦", "9♦", "K♠", "A♠"), H("5♦", "6♦"), H("7♦", "8♦"), H("9♣", "10♣")];
+      room.turn = 0; room.phase = "playing";
+      return room;
+    };
+    let room = setup();
+    ok("the state tells the client the 3♣ is required", S.sanitizeForSeat(room, 0).must3C === true);
+    ok("leading something without the 3♣ is refused", S.validateAndPlay(room, 0, H("9♦")).ok === false && !room.everPlayed);
+    ok("a pair without the 3♣ is refused", S.validateAndPlay(setup(), 0, H("K♠", "A♠")).ok === false);
+    ok("a pair holding the 3♣ is accepted", (room = setup(), S.validateAndPlay(room, 0, H("3♣", "3♦")).ok === true));
+    ok("the single 3♣ is accepted", S.validateAndPlay(setup(), 0, H("3♣")).ok === true);
+    room = setup(); S.validateAndPlay(room, 0, H("3♣"));
+    ok("and after that the requirement is gone", S.sanitizeForSeat(room, 1).must3C === false);
+
+    room = setup(); S.botAct(room);
+    ok("a bot that opens includes the 3♣", room.everPlayed && room.trickPile[0].cards.some((x) => x.rank === "3" && x.suit === "♣"));
+    room = setup(); S.autoTimeout(room);
+    ok("a timeout for the opener plays the 3♣", room.trickPile[0].cards.length === 1 && room.trickPile[0].cards[0].suit === "♣");
+
+    room = makeRoom(); S.startRound(room, 2);   // later round: previous winner leads
+    room.hands = [H("3♣", "4♦"), H("5♦", "6♦"), H("7♦", "8♦"), H("9♣", "10♣")]; room.turn = 2;
+    ok("a later round's leader is not bound to the 3♣", S.sanitizeForSeat(room, 2).must3C === false && S.validateAndPlay(room, 2, H("7♦")).ok === true);
+  }
+
   sock.close(); sock2.close();
 
   console.log("\n" + pass + " passed, " + fail + " failed\n");
