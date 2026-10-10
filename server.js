@@ -124,6 +124,7 @@ function newRoomState(hostName, hostSocketId) {
     trickPile: [],
     finished: [],
     everPlayed: false,
+    must3C: false,
     round: 0,
     roundHistory: [],
     payout: null,
@@ -338,6 +339,7 @@ function sanitizeForSeat(room, seat) {
     cumulative: cumulativeScores(room),
     payout: room.payout,
     everPlayed: room.everPlayed,
+    must3C: !!room.must3C && !room.everPlayed,
     seatDraw: room.seatDraw,
     // who is being asked about a reseat right now; the queue behind them stays private
     seatPrompt: room.seatPrompt
@@ -376,6 +378,8 @@ function startRound(room, forcedLeaderSeat) {
   room.trickPile = [];
   room.finished = [];
   room.everPlayed = false;
+  // only the very first play of a game (opener picked by the 3♣) must contain it
+  room.must3C = !(forcedLeaderSeat !== null && forcedLeaderSeat !== undefined);
   room.payout = null;
   room.round += 1;
   scheduleTurn(room);
@@ -641,6 +645,9 @@ function finishRound(room, seat) {
   room.roundEndTimer = setTimeout(() => advanceAfterRound(room), ROUND_RESULT_DELAY_MS);
 }
 
+const is3C = (c) => c.rank === "3" && c.suit === "♣";
+function needs3C(room) { return !!room.must3C && !room.everPlayed; }
+
 function validateAndPlay(room, seat, cards) {
   if (room.paused) return { ok: false, error: "เกมกำลังพักอยู่" };
   if (room.phase !== "playing" || room.turn !== seat) return { ok: false, error: "ไม่ใช่ตาคุณ" };
@@ -656,8 +663,11 @@ function validateAndPlay(room, seat, cards) {
   if (!comboBeats(combo, prevCombo, cards, prevCards || [])) {
     return { ok: false, error: "ไพ่ชุดนี้ไม่แรงพอ" };
   }
-  // House rule: 3♣ decides WHO opens the first round, but the opener is free
-  // to lead any legal combination -- the 3♣ need not be in it.
+  // House rule: the very first play of the game must contain the 3♣ (any
+  // combination is fine -- single, pair, five-card set -- as long as it has it).
+  if (room.must3C && !room.everPlayed && !cards.some(is3C)) {
+    return { ok: false, error: "ตาแรกต้องลงไพ่ที่มี 3♣" };
+  }
   if (combo.type === "single") {
     const forced = getForcedHighCard(
       { hands: room.hands, finished: room.finished, passedThisTrick: room.passedThisTrick, lastPlayerSeat: room.lastPlayerSeat, lastPlay: room.lastPlay },
@@ -819,6 +829,7 @@ function botAct(room) {
   let move = botChooseMove(room, seat, prevCards, prevCombo);
 
   if (!move && isNewTrick) move = [hand[0]];
+  if (needs3C(room) && !(move && move.some(is3C))) move = [hand.find(is3C)];
 
   const forced = getForcedHighCard(
     { hands: room.hands, finished: room.finished, passedThisTrick: room.passedThisTrick, lastPlayerSeat: room.lastPlayerSeat, lastPlay: room.lastPlay },
@@ -835,10 +846,11 @@ function botAct(room) {
 function autoTimeout(room) {
   if (room.phase !== "playing") return;
   const seat = room.turn;
-  const move = autoTimeoutMove(
+  let move = autoTimeoutMove(
     { hands: room.hands, finished: room.finished, passedThisTrick: room.passedThisTrick, lastPlayerSeat: room.lastPlayerSeat, lastPlay: room.lastPlay },
     seat
   );
+  if (needs3C(room)) move = [room.hands[seat].find(is3C)];
   if (move) applyPlay(room, seat, move);
   else applyPass(room, seat);
   broadcastState(room.code);
@@ -1155,5 +1167,5 @@ module.exports = {
   newRoomState, sanitizeForSeat, broadcastState, makeSeatToken,
   startRound, applyPlay, applyPass, finishRound, advanceAfterRound,
   scheduleTurn, pendingAutoPassSeat, seatPromptQueue, answerSeatPrompt,
-  botAct, autoTimeout, clearTimers, isHost, hostSeatOf,
+  botAct, autoTimeout, validateAndPlay, clearTimers, isHost, hostSeatOf,
 };
