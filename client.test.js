@@ -948,6 +948,13 @@ const byLabel = (s) => buttons().find((b) => (b.textContent || "").includes(s));
   serverSays("state", playingState({ phase: "gameover", mySeat: 1, finalCumulative: [7, -3, 0, -4] }));
   await settle();
   ok("the summary appears", text().includes("จบแมตช์!"));
+  serverSays("state", playingState({ phase: "gameover", mySeat: 1, finalCumulative: [7, -3, 0, -4],
+    players: ["Ann", "Bee", null, "Dan"], finalPlayers: ["Ann", "Bee", "Cat", "Dan"] }));
+  await settle();
+  const sum = overlay() ? overlay().textContent : "";   // the summary only; the table behind still shows the empty seat as a bot
+  ok("a player who left is still shown by name on the final summary", sum.includes("Cat") && !sum.includes("บอท 3"));
+  serverSays("state", playingState({ phase: "gameover", mySeat: 1, finalCumulative: [7, -3, 0, -4] }));
+  await settle();
   ok("a player who is not the host still gets a way out", !!leaveLink());
 
   serverSays("state", playingState({ phase: "gameover", mySeat: 0, finalCumulative: [7, -3, 0, -4] }));
