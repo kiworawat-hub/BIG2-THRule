@@ -207,6 +207,10 @@ function finishedRoom(winner, left, over) {
     let room = finishedRoom(0, { 1: 5, 2: 11, 3: 13 }, { matchRoundsRemaining: 0 });
     S.advanceAfterRound(room);
     ok("when the match is over nobody is asked about a reseat", room.phase === "gameover" && room.seatPrompt === null);
+    ok("the names at the end are kept for the final summary", Array.isArray(room.finalPlayers) && room.finalPlayers.join() === room.players.join());
+    const nameBefore = room.players[2];
+    room.players[2] = null;    // that player leaves after the match is over
+    ok("a player who leaves afterwards is still named there", !!nameBefore && S.sanitizeForSeat(room, 0).finalPlayers[2] === nameBefore && S.sanitizeForSeat(room, 0).players[2] === null);
   }
 
   // ------------------------------------------------------------------
