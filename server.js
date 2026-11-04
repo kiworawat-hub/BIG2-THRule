@@ -144,6 +144,7 @@ function newRoomState(hostName, hostSocketId) {
     matchLimit: null,
     matchDeadline: null, // when a timed match starts its final countdown
     finalCumulative: null,
+    finalPlayers: null,
     botTimer: null,
     turnTimer: null,
     roundEndTimer: null,
@@ -351,6 +352,7 @@ function sanitizeForSeat(room, seat) {
     matchLimit: room.matchLimit,
     matchDeadline: room.matchDeadline,
     finalCumulative: room.finalCumulative,
+    finalPlayers: room.finalPlayers,
   };
 }
 
@@ -492,6 +494,7 @@ function advanceAfterRound(room) {
       (room.matchRoundsRemaining !== null && room.matchRoundsRemaining <= 0)) {
     room.phase = "gameover";
     room.finalCumulative = cumulativeScores(room);
+    room.finalPlayers = [...room.players]; // names as they were when the match ended, so a player who leaves is not shown as a bot
     clearTimers(room);
     broadcastState(room.code);
     return;
@@ -1061,6 +1064,7 @@ io.on("connection", (socket) => {
     room.matchRoundsRemaining = null; // both re-armed by startGame from matchLimit
     room.matchDeadline = null;
     room.finalCumulative = null;
+    room.finalPlayers = null;
     room.lastMultiplierVictims = [];
     room.phase = "waiting";
     broadcastState(code);
