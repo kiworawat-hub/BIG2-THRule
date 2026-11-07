@@ -1,6 +1,6 @@
 {
   "name": "big2-server",
-  "version": "1.5.3",
+  "version": "1.5.4",
   "description": "BIG2 real-time multiplayer server",
   "main": "server.js",
   "scripts": {
