@@ -7,7 +7,7 @@ const { useState, useEffect, useRef, useCallback } = React;
 
 // Shown in the lobby so a player can say which version they are looking at.
 // Keep in step with package.json and CHANGELOG.md.
-const APP_VERSION = "1.5.3";
+const APP_VERSION = "1.5.4";
 
 // A friend opening big2unity.onrender.com/?room=KQ7M lands with the code
 // already filled in, so joining is one tap instead of typing it correctly.
@@ -750,13 +750,13 @@ function ChatPanel({ chat, chatInput, setChatInput, sendChat, mySeat }) {
 // The lobby sign board. The server still never sends room codes, so nothing
 // here can be clicked to take a seat -- only to watch, using a watchId that
 // the observeRoom event is the sole thing that accepts.
-function RoomList({ rooms, onRefresh, onWatch }) {
+function RoomList({ rooms, onRefresh, onWatch, onJoin }) {
   const status = (r) =>
     r.phase === "waiting" ? "กำลังรอผู้เล่น" : r.phase === "gameover" ? "จบแมตช์แล้ว" : `รอบที่ ${r.round}`;
   return /* @__PURE__ */ React.createElement("div", { style: { marginTop: 20, borderTop: "1px solid rgba(255,255,255,.08)", paddingTop: 14 } },
     /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 } },
       /* @__PURE__ */ React.createElement("span", { style: { color: GOLD, fontSize: 13, fontWeight: 700 } },
-        rooms.length ? `\u{1F3AE} กำลังเล่นอยู่ ${rooms.length} ห้อง` : "\u{1F3AE} ห้องที่เล่นอยู่"),
+        "\u{1F3AE} ห้อง"),
       /* @__PURE__ */ React.createElement("span", { onClick: onRefresh, style: { color: FAINT, fontSize: 11, textDecoration: "underline", cursor: "pointer" } }, "รีเฟรช")),
     rooms.length === 0
       ? /* @__PURE__ */ React.createElement("p", { style: { color: MUTED, fontSize: 12, textAlign: "center", margin: 0 } }, "ยังไม่มีใครเล่นอยู่ตอนนี้")
@@ -766,7 +766,9 @@ function RoomList({ rooms, onRefresh, onWatch }) {
               r.players.map((p, s) => p || `บอท ${s + 1}`).join(", ")),
             /* @__PURE__ */ React.createElement("div", { style: { color: MUTED, fontSize: 11, marginTop: 2 } },
               status(r), r.observers > 0 && ` \xB7 \u{1F441} ${r.observers}`)),
-          r.watchId && /* @__PURE__ */ React.createElement("button", { onClick: () => onWatch(r.watchId), style: smallBtn(false) }, "\u{1F441} เข้าไปดู"))));
+          r.joinCode
+            ? /* @__PURE__ */ React.createElement("button", { onClick: () => onJoin(r.joinCode), style: smallBtn(true) }, "เข้าร่วมห้อง")
+            : r.watchId && /* @__PURE__ */ React.createElement("button", { onClick: () => onWatch(r.watchId), style: smallBtn(false) }, "\u{1F441} เข้าไปดู"))));
 }
 function App() {
   const socketRef = useRef(null);
@@ -1195,7 +1197,7 @@ function App() {
     setSelected((prev) => prev.some((s) => cardKey(s) === k) ? prev.filter((s) => cardKey(s) !== k) : [...prev, c]);
   }
   if (screen === "lobby") {
-    return /* @__PURE__ */ React.createElement("div", { style: styles.bg }, /* @__PURE__ */ React.createElement("div", { style: styles.card }, /* @__PURE__ */ React.createElement("h1", { style: { color: GOLD, textAlign: "center", fontSize: 36, letterSpacing: 4 } }, "BIG 2"), /* @__PURE__ */ React.createElement("p", { style: { color: MUTED, textAlign: "center", fontSize: 13, marginBottom: 20 } }, connected ? "เชื่อมต่อแล้ว — เล่นได้แบบไม่ดีเลย์" : "กำลังเชื่อมต่อ..."), /* @__PURE__ */ React.createElement("input", { style: styles.input, placeholder: "ชื่อของคุณ", value: name, onChange: (e) => setName(e.target.value) }), /* @__PURE__ */ React.createElement("button", { style: styles.goldBtn, onClick: createRoom }, "สร้างห้องใหม่"), /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", color: FAINT, fontSize: 12, margin: "14px 0" } }, "หรือ"), /* @__PURE__ */ React.createElement("input", { style: styles.input, placeholder: "รหัสห้อง", value: roomCode, onChange: (e) => setRoomCode(e.target.value.toUpperCase()), maxLength: 4 }), /* @__PURE__ */ React.createElement("button", { style: styles.greenBtn, onClick: () => joinRoom() }, "เข้าร่วมห้อง"), error && /* @__PURE__ */ React.createElement("div", { style: { marginTop: 10, color: NEG_COLOR, fontSize: 12, textAlign: "center" } }, error), !URL_ROOM && /* @__PURE__ */ React.createElement(RoomList, { rooms: roomList, onRefresh: refreshRooms, onWatch: watchRoom }), /* @__PURE__ */ React.createElement("p", { style: { color: FAINT, fontSize: 10, textAlign: "center", marginTop: 16, marginBottom: 0 } }, `v${APP_VERSION}`)));
+    return /* @__PURE__ */ React.createElement("div", { style: styles.bg }, /* @__PURE__ */ React.createElement("div", { style: styles.card }, /* @__PURE__ */ React.createElement("h1", { style: { color: GOLD, textAlign: "center", fontSize: 36, letterSpacing: 4 } }, "BIG 2"), /* @__PURE__ */ React.createElement("p", { style: { color: MUTED, textAlign: "center", fontSize: 13, marginBottom: 20 } }, connected ? "เชื่อมต่อแล้ว — เล่นได้แบบไม่ดีเลย์" : "กำลังเชื่อมต่อ..."), /* @__PURE__ */ React.createElement("input", { style: styles.input, placeholder: "ชื่อของคุณ", value: name, onChange: (e) => setName(e.target.value) }), /* @__PURE__ */ React.createElement("button", { style: styles.goldBtn, onClick: createRoom }, "สร้างห้องใหม่"), /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center", color: FAINT, fontSize: 12, margin: "14px 0" } }, "หรือ"), /* @__PURE__ */ React.createElement("input", { style: styles.input, placeholder: "รหัสห้อง", value: roomCode, onChange: (e) => setRoomCode(e.target.value.toUpperCase()), maxLength: 4 }), /* @__PURE__ */ React.createElement("button", { style: styles.greenBtn, onClick: () => joinRoom() }, "เข้าร่วมห้อง"), error && /* @__PURE__ */ React.createElement("div", { style: { marginTop: 10, color: NEG_COLOR, fontSize: 12, textAlign: "center" } }, error), !URL_ROOM && /* @__PURE__ */ React.createElement(RoomList, { rooms: roomList, onRefresh: refreshRooms, onWatch: watchRoom, onJoin: (code) => joinRoom(void 0, code) }), /* @__PURE__ */ React.createElement("p", { style: { color: FAINT, fontSize: 10, textAlign: "center", marginTop: 16, marginBottom: 0 } }, `v${APP_VERSION}`)));
   }
   if (!state) return /* @__PURE__ */ React.createElement("div", { style: styles.bg }, /* @__PURE__ */ React.createElement("div", { style: styles.card }, /* @__PURE__ */ React.createElement("p", { style: { color: "#fff" } }, "กำลังโหลด...")));
   // Seat -1 is an observer: no chair, so the table is drawn from seat 1's side.
