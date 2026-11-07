@@ -192,17 +192,23 @@ function roomIsEmpty(room) {
   return room.socketIds.every(id => id === null);
 }
 
-// The lobby sign board: what is being played right now, for anyone who opens
-// the site. Deliberately WITHOUT the room code -- the code is the only thing
-// guarding a room, so publishing it would let strangers take an open seat,
-// read the chat and join the voice call. Names, how far along, and a watchId
-// that buys nothing but a seat in the audience.
+// The lobby sign board: the tables currently open, for anyone who opens the
+// site. A table still waiting for players with a free seat carries its room
+// code (an open invitation, so the board can offer "join"). Once the game is
+// on, the code is withheld -- it is the only thing guarding the room -- and the
+// entry has names, how far along, and a watchId that buys only a seat in the
+// audience.
 function activeRoomSummaries() {
   const out = [];
   for (const room of rooms.values()) {
     if (roomIsEmpty(room)) continue; // abandoned rooms linger for EMPTY_ROOM_TTL_MS
-    out.push({ players: room.players, phase: room.phase, round: room.round,
-               watchId: room.watchId, observers: room.observers.size });
+    const entry = { players: room.players, phase: room.phase, round: room.round,
+                    watchId: room.watchId, observers: room.observers.size };
+    // A table still waiting for players with a free seat is an open invitation:
+    // it carries its code so the board can offer "join" instead of making the
+    // host copy a link. Tables being played stay code-free (watch only).
+    if (room.phase === "waiting" && room.players.some(p => p === null)) entry.joinCode = room.code;
+    out.push(entry);
   }
   return out;
 }
