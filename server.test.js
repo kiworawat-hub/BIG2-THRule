@@ -457,12 +457,20 @@ async function listRoomsTest() {
   await sleep(500); // well inside the TTL, so only the filter can hide it
   const after = await askList();
 
+  // the same table once the game is on: the code must be withheld
+  const wait = { code: host.code, joinCode: mine ? mine.joinCode : undefined };
+  host.sock.emit("startGame", { code: host.code });
+  await sleep(500);
+  const started = await askList();
+  const minePlaying = (started.rooms || []).find(r => (r.players || []).includes("Lobbyist"));
+
   host.sock.close();
   return {
+    waitingJoinCode: wait.joinCode === wait.code,
+    playingHidesCode: !!minePlaying && minePlaying.joinCode === undefined && !JSON.stringify(started.rooms || []).includes(host.code),
     listed: !!mine,
     names: mine ? mine.players : [],
     fields: mine ? Object.keys(mine).sort().join(",") : "",
-    leaksCode: JSON.stringify(live.rooms || []).includes(host.code),
     ghostHidden: !(after.rooms || []).some(r => (r.players || []).includes("Ghosty")),
   };
 }
@@ -705,9 +713,10 @@ async function observeTest() {
     ok("a room being played is listed", lob.listed);
     ok("it names the players (" + lob.names.filter(Boolean).join(", ") + ")",
        lob.names.includes("Lobbyist") && lob.names.includes("Ann"));
-    ok("it sends nothing but names, phase, round and how to watch (" + lob.fields + ")",
-       lob.fields === "observers,phase,players,round,watchId");
-    ok("it never hands out the room code", !lob.leaksCode);
+    ok("it sends nothing but names, phase, round, how to watch, and the join code (" + lob.fields + ")",
+       lob.fields === "joinCode,observers,phase,players,round,watchId");
+    ok("a room still waiting for players carries its code, so it can be joined", lob.waitingJoinCode);
+    ok("once the game starts the code is withheld", lob.playingHidesCode);
     ok("an abandoned room is not advertised", lob.ghostHidden);
 
     console.log("\nwatching a table without a seat");
