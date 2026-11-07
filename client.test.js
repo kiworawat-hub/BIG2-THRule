@@ -874,12 +874,29 @@ const byLabel = (s) => buttons().find((b) => (b.textContent || "").includes(s));
   ok("it lists who is playing", text().includes("Pok, Ann"));
   ok("it fills the empty seats in as bots", text().includes("บอท 3"));
   ok("it says how far along they are", text().includes("รอบที่ 7"));
-  ok("it counts the rooms", text().includes("กำลังเล่นอยู่ 1 ห้อง"));
+  ok("the board is headed just \"ห้อง\", with no count", text().includes("ห้อง") && !text().includes("กำลังเล่นอยู่"));
 
   roomsOnAir = [];
   if (refreshLink()) refreshLink().click();
   await settle();
   ok("it says so when nobody is playing", text().includes("ยังไม่มีใครเล่นอยู่ตอนนี้"));
+
+  console.log("\na waiting room can be joined straight from the board");
+  roomsOnAir = [
+    { players: ["Ann", null, null, null], phase: "waiting", round: 0, watchId: "w-wait", observers: 0, joinCode: "WXYZ" },
+    { players: ["Bee", "Cat", null, null], phase: "playing", round: 3, watchId: "w-play", observers: 0 },
+  ];
+  if (refreshLink()) refreshLink().click();
+  await settle();
+  const joinBtns = () => buttons().filter((b) => (b.textContent || "").trim() === "เข้าร่วมห้อง" && b.closest && b.closest("div[style*='rgba(255, 255, 255, 0.05)']"));
+  const watchBtns = () => buttons().filter((b) => (b.textContent || "").includes("เข้าไปดู"));
+  ok("the waiting room offers join", joinBtns().length === 1);
+  ok("the room being played still offers watch, and only that", watchBtns().length === 1);
+  sent.length = 0;
+  if (joinBtns()[0]) joinBtns()[0].click();
+  await settle();
+  const jm = sent.find((m) => m.ev === "joinRoom");
+  ok("join uses that room's code and the typed name", jm && jm.payload.code === "WXYZ" && jm.payload.name.trim().length > 0);
 
   console.log("\nwatching a game from the lobby");
   roomsOnAir = [{ players: ["Pok", "Ann", null, null], phase: "playing", round: 7, watchId: "watch-1", observers: 0 }];
