@@ -373,10 +373,10 @@ function finishedRoom(winner, left, over) {
   {
     const http = require("http");
     const got = [];
-    let mode = "ok", hits = 0;
+    let mode = "ok", hits = 0, replyBody = "ok";
     const srv = http.createServer((req, res) => {
       let b = ""; req.on("data", (d) => (b += d));
-      req.on("end", () => { hits++; if (mode === "fail") { res.statusCode = 500; return res.end("x"); } got.push(JSON.parse(b)); res.end("ok"); });
+      req.on("end", () => { hits++; if (mode === "fail") { res.statusCode = 500; return res.end("x"); } got.push(JSON.parse(b)); res.end(replyBody); });
     });
     await new Promise((r) => srv.listen(0, r));
     process.env.SHEET_WEBHOOK_URL = "http://127.0.0.1:" + srv.address().port + "/";
@@ -423,6 +423,11 @@ function finishedRoom(winner, left, over) {
       socks.forEach((x) => x.close());
     }
 
+    replyBody = "error: TypeError: Cannot read properties of null"; hits = 0;
+    ok("a 200 reply that is not ok counts as a failure", (await SL.logMatch(room, { retryDelaysMs: [10] })) === false && hits === 2);
+    replyBody = "duplicate";
+    ok("'duplicate' counts as done", (await SL.logMatch(room, { retryDelaysMs: [10] })) === true);
+    replyBody = "ok";
     mode = "fail"; hits = 0;
     const okRes = await SL.logMatch(room, { retryDelaysMs: [20, 20] });
     ok("a failing sheet is retried, then given up quietly", okRes === false && hits === 3);

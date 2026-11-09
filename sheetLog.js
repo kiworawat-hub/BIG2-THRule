@@ -42,6 +42,12 @@ async function postOnce(url, body) {
     signal: AbortSignal.timeout(10000),
   });
   if (!res.ok) throw new Error("HTTP " + res.status);
+  // Apps Script answers 200 even when it refused or failed, so read what it
+  // said: only "ok" (added) or "duplicate" (already there) count as success.
+  const text = (await res.text()).trim();
+  if (!/^(ok|duplicate)$/.test(text)) {
+    throw new Error("the sheet script replied: " + text.replace(/\s+/g, " ").slice(0, 160));
+  }
 }
 
 // Never throws and never blocks the caller.

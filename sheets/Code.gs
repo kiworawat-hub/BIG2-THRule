@@ -3,12 +3,15 @@
 // Set SECRET to the same value as SHEET_SECRET on Render (or leave "" for none).
 const SECRET = "";
 const SHEET_NAME = "แมตช์";
+// Only needed if this script was NOT created from the sheet (Extensions > Apps Script).
+// Paste the sheet's ID: the long text between /d/ and /edit in its address.
+const SPREADSHEET_ID = "";
 
 function doPost(e) {
   try {
     const data = JSON.parse(e.postData.contents);
     if (SECRET && data.secret !== SECRET) return out_("forbidden");
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const ss = SPREADSHEET_ID ? SpreadsheetApp.openById(SPREADSHEET_ID) : SpreadsheetApp.getActiveSpreadsheet();
     let sh = ss.getSheetByName(SHEET_NAME);
     if (!sh) sh = ss.insertSheet(SHEET_NAME);
     if (sh.getLastRow() === 0) {
