@@ -7,7 +7,7 @@
 const path = require("path");
 const express = require("express");
 const http = require("http");
-const { logMatch } = require("./sheetLog");
+const { logMatch, describeSetup } = require("./sheetLog");
 const { Server } = require("socket.io");
 const {
   cardKey, dealFour, findStartPlayer, handContainsAll, classifyCombo, comboBeats,
@@ -1175,7 +1175,7 @@ io.on("connection", (socket) => {
 // not: the test starts it on a port of its own, and reaches into the rooms to
 // set up situations that a random deal would take hours to produce.
 if (require.main === module) {
-  server.listen(PORT, () => console.log(`Big2 server running on port ${PORT}`));
+  server.listen(PORT, () => { console.log(`Big2 server running on port ${PORT}`); console.log(describeSetup()); });
 }
 
 module.exports = {

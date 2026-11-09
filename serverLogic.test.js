@@ -426,8 +426,10 @@ function finishedRoom(winner, left, over) {
     mode = "fail"; hits = 0;
     const okRes = await SL.logMatch(room, { retryDelaysMs: [20, 20] });
     ok("a failing sheet is retried, then given up quietly", okRes === false && hits === 3);
+    ok("the startup line says logging is ON when the URL is set", /ON/.test(SL.describeSetup()));
     delete process.env.SHEET_WEBHOOK_URL;
     ok("with no URL set it does nothing", SL.logMatch(room) === null);
+    ok("and the startup line says logging is OFF", /OFF/.test(SL.describeSetup()));
     srv.close();
   }
 

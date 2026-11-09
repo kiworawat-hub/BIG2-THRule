@@ -47,15 +47,15 @@ async function postOnce(url, body) {
 // Never throws and never blocks the caller.
 function logMatch(room, opts = {}) {
   const url = process.env.SHEET_WEBHOOK_URL;
-  if (!url) return null;
-  if (!room.allHumanStart) return null; // started with bots in it: not a leaderboard match
+  if (!url) { console.log("[sheet] skipped: SHEET_WEBHOOK_URL is not set"); return null; }
+  if (!room.allHumanStart) { console.log("[sheet] skipped: the match did not start with four real players"); return null; } // not a leaderboard match
   const payload = buildPayload(room);
-  if (payload.rows.length === 0) return null;
+  if (payload.rows.length === 0) { console.log("[sheet] skipped: no real players to record"); return null; }
   if (process.env.SHEET_SECRET) payload.secret = process.env.SHEET_SECRET;
   const delays = opts.retryDelaysMs || [2000, 10000, 60000];
   const done = (async () => {
     for (let i = 0; i <= delays.length; i++) {
-      try { await postOnce(url, payload); return true; }
+      try { await postOnce(url, payload); console.log("[sheet] logged match " + payload.matchId + " (" + payload.rows.length + " players)"); return true; }
       catch (e) {
         if (i === delays.length) { console.error("[sheet] could not log match:", e.message); return false; }
         await new Promise((r) => setTimeout(r, delays[i]));
@@ -65,4 +65,10 @@ function logMatch(room, opts = {}) {
   return done; // tests await it; the game ignores it
 }
 
-module.exports = { buildPayload, logMatch };
+function describeSetup() {
+  return process.env.SHEET_WEBHOOK_URL
+    ? "[sheet] logging is ON (matches with four real players are sent to the sheet)"
+    : "[sheet] logging is OFF: SHEET_WEBHOOK_URL is not set";
+}
+
+module.exports = { buildPayload, logMatch, describeSetup };
