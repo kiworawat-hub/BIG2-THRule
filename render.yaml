@@ -18,7 +18,7 @@ services:
         value: "22"
       # Optional: log every finished match to a Google Sheet (see sheets/SETUP.md).
       # Leave the values empty here and fill them in on the Render dashboard.
-      - key: https://script.google.com/macros/s/AKfycbxwwNSgYahclj-bdvXAXeuqAXd-sSu4Bh3QjLpApHEnwXFh6qlH1PgEXMDBlCD0CxXmUg/exec
+      - key: SHEET_WEBHOOK_URL
         sync: false
-      - key: big2-thrule
+      - key: SHEET_SECRET
         sync: false
