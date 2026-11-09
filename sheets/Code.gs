@@ -1,7 +1,7 @@
 // Google Apps Script -- paste into the Sheet's Extensions > Apps Script.
 // Receives one POST per finished match and appends one row per player.
 // Set SECRET to the same value as SHEET_SECRET on Render (or leave "" for none).
-const SECRET = "";
+const SECRET = "big2-thrule1234";
 const SHEET_NAME = "แมตช์";
 // Only needed if this script was NOT created from the sheet (Extensions > Apps Script).
 // Paste the sheet's ID: the long text between /d/ and /edit in its address.
