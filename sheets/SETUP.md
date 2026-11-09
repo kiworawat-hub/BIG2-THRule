@@ -1,0 +1,20 @@
+# ตั้งค่าบันทึกผลแมตช์ลง Google Sheet (ทำครั้งเดียว)
+
+1. เข้า https://sheets.new สร้างชีตใหม่ ตั้งชื่ออะไรก็ได้ เช่น "Big2 Scores"
+2. เมนู **Extensions → Apps Script**
+3. ลบโค้ดที่มีอยู่ แล้ววางโค้ดจากไฟล์ `sheets/Code.gs` ทั้งหมด
+4. (แนะนำ) ตั้งรหัสลับ: แก้บรรทัด `const SECRET = "";` เป็นรหัสที่คิดเอง เช่น `const SECRET = "big2-abc123";`
+5. กด **Deploy → New deployment** → ไอคอนเฟือง เลือก **Web app**
+   - Execute as: **Me**
+   - Who has access: **Anyone**
+   - กด Deploy แล้วอนุญาตสิทธิ์ (Authorize access) ตามที่ขอ
+6. ก๊อป **Web app URL** (ขึ้นต้น https://script.google.com/macros/s/.../exec)
+7. เข้า Render → บริการ big2 → **Environment** → เพิ่มตัวแปร
+   - `SHEET_WEBHOOK_URL` = URL จากข้อ 6
+   - `SHEET_SECRET` = รหัสลับจากข้อ 4 (ถ้าตั้งไว้ ต้องตรงกันทุกตัวอักษร)
+8. Render จะรีสตาร์ตเอง เล่นจนจบแมตช์หนึ่งครั้งแล้วดูในชีต แท็บ "แมตช์" จะมีแถวใหม่
+
+หมายเหตุ
+- ถ้าแก้โค้ด Apps Script ภายหลัง ต้อง **Deploy → Manage deployments → แก้ไข → New version** URL เดิมถึงจะใช้โค้ดใหม่
+- ผู้เล่นหนึ่งคนต่อหนึ่งแถว คอลัมน์: วันที่, เวลา, ชื่อ, คะแนน, อันดับ, จำนวนรอบ, รหัสแมตช์ (ห้ามลบคอลัมน์สุดท้าย ใช้กันบันทึกซ้ำ)
+- เวลาเป็นเวลาไทยทั้งหมด

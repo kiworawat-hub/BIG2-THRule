@@ -7,7 +7,7 @@ const { useState, useEffect, useRef, useCallback } = React;
 
 // Shown in the lobby so a player can say which version they are looking at.
 // Keep in step with package.json and CHANGELOG.md.
-const APP_VERSION = "1.5.4";
+const APP_VERSION = "1.5.5";
 
 // A friend opening big2unity.onrender.com/?room=KQ7M lands with the code
 // already filled in, so joining is one tap instead of typing it correctly.

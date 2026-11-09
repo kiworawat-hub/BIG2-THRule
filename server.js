@@ -7,6 +7,7 @@
 const path = require("path");
 const express = require("express");
 const http = require("http");
+const { logMatch } = require("./sheetLog");
 const { Server } = require("socket.io");
 const {
   cardKey, dealFour, findStartPlayer, handContainsAll, classifyCombo, comboBeats,
@@ -502,6 +503,7 @@ function advanceAfterRound(room) {
     room.finalCumulative = cumulativeScores(room);
     room.finalPlayers = [...room.players]; // names as they were when the match ended, so a player who leaves is not shown as a bot
     clearTimers(room);
+    logMatch(room); // optional: appends this match to the Google Sheet
     broadcastState(room.code);
     return;
   }

@@ -369,6 +369,45 @@ function finishedRoom(winner, left, over) {
   }
 
   // ------------------------------------------------------------------
+  console.log("\nevery finished match goes to the Google Sheet");
+  {
+    const http = require("http");
+    const got = [];
+    let mode = "ok", hits = 0;
+    const srv = http.createServer((req, res) => {
+      let b = ""; req.on("data", (d) => (b += d));
+      req.on("end", () => { hits++; if (mode === "fail") { res.statusCode = 500; return res.end("x"); } got.push(JSON.parse(b)); res.end("ok"); });
+    });
+    await new Promise((r) => srv.listen(0, r));
+    process.env.SHEET_WEBHOOK_URL = "http://127.0.0.1:" + srv.address().port + "/";
+    process.env.SHEET_SECRET = "s3cret";
+    const SL = require("./sheetLog");
+
+    const room = finishedRoom(0, { 1: 5, 2: 11, 3: 13 }, { matchRoundsRemaining: 0, players: ["Ann", "Bee", null, "Dan"] });
+    room.roundHistory = [{ round: 1, net: [6, -1, -2, -3], players: ["Ann", "Bee", null, "Dan"], scores: [] }];
+    S.advanceAfterRound(room);
+    await sleep(300);
+    ok("one post when the match ends", got.length === 1);
+    const p = got[0] || { rows: [] };
+    ok("it carries the secret", p.secret === "s3cret");
+    ok("it has a Thai date and time", /^\d{4}-\d{2}-\d{2}$/.test(p.date || "") && /^\d{2}:\d{2}:\d{2}$/.test(p.time || ""));
+    ok("one row per real player, bots left out", p.rows.map((r) => r.name).join() === "Ann,Bee,Dan");
+    ok("with each player's total", p.rows.find((r) => r.name === "Ann").score === 6 && p.rows.find((r) => r.name === "Dan").score === -3);
+    ok("and rank among the four seats", p.rows.find((r) => r.name === "Ann").rank === 1 && p.rows.find((r) => r.name === "Dan").rank === 4);
+    ok("a round does not post by itself", (() => { const n = got.length; const r2 = finishedRoom(0, { 1: 5, 2: 11, 3: 13 }); S.advanceAfterRound(r2); return got.length === n; })());
+
+    const d = SL.buildPayload({ players: ["A", "B", "C", "D"], finalPlayers: null, finalCumulative: [0, 0, 0, 0], round: 1 }, new Date("2026-11-09T17:30:00Z"));
+    ok("times are Bangkok time, not server time", d.date === "2026-11-10" && d.time === "00:30:00");
+
+    mode = "fail"; hits = 0;
+    const okRes = await SL.logMatch(room, { retryDelaysMs: [20, 20] });
+    ok("a failing sheet is retried, then given up quietly", okRes === false && hits === 3);
+    delete process.env.SHEET_WEBHOOK_URL;
+    ok("with no URL set it does nothing", SL.logMatch(room) === null);
+    srv.close();
+  }
+
+  // ------------------------------------------------------------------
   console.log("\nthe very first play of the game must contain the 3♣");
   {
     const setup = () => {
