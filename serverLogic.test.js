@@ -383,7 +383,7 @@ function finishedRoom(winner, left, over) {
     process.env.SHEET_SECRET = "s3cret";
     const SL = require("./sheetLog");
 
-    const room = finishedRoom(0, { 1: 5, 2: 11, 3: 13 }, { matchRoundsRemaining: 0, players: ["Ann", "Bee", null, "Dan"] });
+    const room = finishedRoom(0, { 1: 5, 2: 11, 3: 13 }, { matchRoundsRemaining: 0, players: ["Ann", "Bee", null, "Dan"], allHumanStart: true });
     room.roundHistory = [{ round: 1, net: [6, -1, -2, -3], players: ["Ann", "Bee", null, "Dan"], scores: [] }];
     S.advanceAfterRound(room);
     await sleep(300);
@@ -398,6 +398,30 @@ function finishedRoom(winner, left, over) {
 
     const d = SL.buildPayload({ players: ["A", "B", "C", "D"], finalPlayers: null, finalCumulative: [0, 0, 0, 0], round: 1 }, new Date("2026-11-09T17:30:00Z"));
     ok("times are Bangkok time, not server time", d.date === "2026-11-10" && d.time === "00:30:00");
+
+    const nBefore = got.length;
+    const botMatch = finishedRoom(0, { 1: 5, 2: 11, 3: 13 }, { matchRoundsRemaining: 0, players: ["Ann", "Bee", null, "Dan"], allHumanStart: false });
+    S.advanceAfterRound(botMatch);
+    await sleep(300);
+    ok("a match that started with bots in it is not logged", botMatch.phase === "gameover" && got.length === nBefore);
+
+    // the flag itself, set by the real startGame handler
+    const PORTX = S.server.address() ? S.server.address().port : null;
+    if (PORTX) {
+      const sockA = connect("http://localhost:" + PORTX); await new Promise((r) => sockA.on("connect", r));
+      const mk = await new Promise((r) => sockA.emit("createRoom", { name: "Solo2" }, r));
+      sockA.emit("startGame", { code: mk.code }); await sleep(150);
+      ok("starting with bots in the room records it", S.rooms.get(mk.code).allHumanStart === false);
+      sockA.close();
+      const fullHouse = [];
+      const socks = [];
+      for (let i = 0; i < 4; i++) { const sk = connect("http://localhost:" + PORTX); await new Promise((r) => sk.on("connect", r)); socks.push(sk); }
+      const mk4 = await new Promise((r) => socks[0].emit("createRoom", { name: "P0" }, r));
+      for (let i = 1; i < 4; i++) await new Promise((r) => socks[i].emit("joinRoom", { name: "P" + i, code: mk4.code }, r));
+      socks[0].emit("startGame", { code: mk4.code }); await sleep(150);
+      ok("starting with four real players records it", S.rooms.get(mk4.code).allHumanStart === true);
+      socks.forEach((x) => x.close());
+    }
 
     mode = "fail"; hits = 0;
     const okRes = await SL.logMatch(room, { retryDelaysMs: [20, 20] });

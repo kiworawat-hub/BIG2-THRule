@@ -146,6 +146,7 @@ function newRoomState(hostName, hostSocketId) {
     matchDeadline: null, // when a timed match starts its final countdown
     finalCumulative: null,
     finalPlayers: null,
+    allHumanStart: false,
     botTimer: null,
     turnTimer: null,
     roundEndTimer: null,
@@ -1029,6 +1030,9 @@ io.on("connection", (socket) => {
       room.matchLimit && room.matchLimit.type === "rounds" ? room.matchLimit.value : null;
     room.matchDeadline = room.matchLimit && room.matchLimit.type === "time"
       ? Date.now() + room.matchLimit.value * MATCH_TIME_UNIT_MS : null;
+    // only a match that STARTS with four real players counts for the sheet: a
+    // room played against bots must not feed the leaderboard
+    room.allHumanStart = room.players.every(p => !!p);
     beginSeatDraw(room, 1, null); // always draw seats before the very first round
     broadcastState(code);
   });

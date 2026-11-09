@@ -48,6 +48,7 @@ async function postOnce(url, body) {
 function logMatch(room, opts = {}) {
   const url = process.env.SHEET_WEBHOOK_URL;
   if (!url) return null;
+  if (!room.allHumanStart) return null; // started with bots in it: not a leaderboard match
   const payload = buildPayload(room);
   if (payload.rows.length === 0) return null;
   if (process.env.SHEET_SECRET) payload.secret = process.env.SHEET_SECRET;
